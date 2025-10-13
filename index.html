@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contador de Personas en Tiempo Real</title>
+    <title>Contador de Personas - Cámara en Tiempo Real</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
     <style>
@@ -30,7 +30,7 @@
             padding: 30px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.3);
             width: 100%;
-            max-width: 900px;
+            max-width: 1000px;
             backdrop-filter: blur(10px);
         }
 
@@ -51,6 +51,37 @@
         .header p {
             color: #666;
             font-size: 1.1em;
+        }
+
+        .navigation {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: white;
+            text-align: center;
+            background: linear-gradient(135deg, #3498db, #2980b9);
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(52, 152, 219, 0.4);
+        }
+
+        .nav-btn.active {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
         }
 
         .stats-container {
@@ -99,7 +130,7 @@
         .video-container {
             position: relative;
             width: 100%;
-            max-width: 640px;
+            max-width: 800px;
             margin: 0 auto 20px;
             border-radius: 15px;
             overflow: hidden;
@@ -235,16 +266,6 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
 
-        .history-time {
-            font-size: 0.9em;
-            color: #666;
-        }
-
-        .history-count {
-            font-weight: bold;
-            color: #2c3e50;
-        }
-
         .loading {
             display: inline-block;
             width: 20px;
@@ -281,27 +302,18 @@
                 font-size: 1em;
             }
         }
-
-        .confidence-bar {
-            height: 4px;
-            background: #e0e0e0;
-            border-radius: 2px;
-            margin-top: 5px;
-            overflow: hidden;
-        }
-
-        .confidence-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #e74c3c, #f39c12, #27ae60);
-            transition: width 0.3s ease;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>👥 Contador de Personas en Tiempo Real</h1>
-            <p>Detección automática usando IA - TensorFlow.js</p>
+            <h1>👥 Sistema de Conteo de Personas</h1>
+            <p>Detección en tiempo real y análisis de videos</p>
+        </div>
+
+        <div class="navigation">
+            <a href="index.html" class="nav-btn active">📹 Cámara en Tiempo Real</a>
+            <a href="video-counter.html" class="nav-btn">🎬 Analizar Videos</a>
         </div>
 
         <div class="stats-container">
@@ -324,15 +336,8 @@
         </div>
 
         <div class="video-container">
-            <video id="video" width="640" height="480" autoplay muted playsinline></video>
+            <video id="video" width="800" height="600" autoplay muted playsinline></video>
             <canvas id="canvas"></canvas>
-        </div>
-
-        <div class="confidence-bar">
-            <div id="confidenceFill" class="confidence-fill" style="width: 0%"></div>
-        </div>
-        <div style="text-align: center; color: #666; font-size: 0.9em; margin-bottom: 15px;">
-            Confianza de detección: <span id="confidenceText">0%</span>
         </div>
 
         <div class="controls">
@@ -377,8 +382,6 @@
         const averageCountEl = document.getElementById('averageCount');
         const sessionTimeEl = document.getElementById('sessionTime');
         const historyList = document.getElementById('historyList');
-        const confidenceFill = document.getElementById('confidenceFill');
-        const confidenceText = document.getElementById('confidenceText');
         const btnStart = document.getElementById('btnStart');
         const btnStop = document.getElementById('btnStop');
         const btnScreenshot = document.getElementById('btnScreenshot');
@@ -441,8 +444,8 @@
                 // Solicitar acceso a la cámara
                 stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
-                        width: { ideal: 640 },
-                        height: { ideal: 480 },
+                        width: { ideal: 800 },
+                        height: { ideal: 600 },
                         facingMode: 'environment'
                     },
                     audio: false 
@@ -551,11 +554,6 @@
             stats.totalDetections += count;
             totalCountEl.textContent = stats.totalDetections;
             
-            // Actualizar confianza
-            const confidencePercent = Math.round(avgConfidence * 100);
-            confidenceFill.style.width = confidencePercent + '%';
-            confidenceText.textContent = confidencePercent + '%';
-            
             // Guardar en historial cada 5 segundos
             if (stats.detectionCount % 10 === 0) { // 10 detecciones * 500ms = 5 segundos
                 addToHistory(count, avgConfidence);
@@ -587,6 +585,15 @@
                 ctx.font = '16px Arial';
                 ctx.fillText(`Persona: ${confidence}%`, x + 5, y - 8);
             });
+
+            // Dibujar contador en pantalla
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(10, 10, 200, 60);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText(`Personas: ${stats.currentCount}`, 20, 40);
+            ctx.font = '16px Arial';
+            ctx.fillText(`Máximo: ${stats.maxCount}`, 20, 65);
         }
 
         // Agregar al historial
@@ -622,9 +629,9 @@
                 div.innerHTML = `
                     <div>
                         <strong>${item.count} persona(s)</strong>
-                        <div class="history-time">${item.time}</div>
+                        <div style="font-size: 0.8em; color: #666;">${item.time}</div>
                     </div>
-                    <div class="history-count">
+                    <div style="font-weight: bold; color: #2c3e50;">
                         ${Math.round(item.confidence * 100)}% conf
                     </div>
                 `;
