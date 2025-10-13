@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificación de Identidad - Educación Virtual</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .header {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            max-width: 900px;
+            width: 100%;
+        }
+
+        .video-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            border-radius: 15px;
+            overflow: hidden;
+            background: #000;
+            border: 3px solid #0984e3;
+        }
+
+        video {
+            width: 100%;
+            max-width: 640px;
+            border-radius: 15px;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #status {
+            background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(9, 132, 227, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #e17055 0%, #d63031 100%);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(225, 112, 85, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 184, 148, 0.4);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(253, 203, 110, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-card h3 {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-card p {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .stat-card.primary {
+            background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
+        }
+
+        .stat-card.primary h3,
+        .stat-card.primary p {
+            color: white;
+        }
+
+        .stat-card.success {
+            background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
+        }
+
+        .stat-card.success h3,
+        .stat-card.success p {
+            color: white;
+        }
+
+        .stat-card.warning {
+            background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
+        }
+
+        .stat-card.warning h3,
+        .stat-card.warning p {
+            color: white;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .config-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .config-panel label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .config-panel input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .config-panel input[type="number"] {
+            width: 80px;
+            padding: 5px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        .verification-panel {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .verification-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .verification-card h3 {
+            margin-bottom: 10px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .student-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        .student-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            align-items: center;
+        }
+
+        .student-item:last-child {
+            border-bottom: none;
+        }
+
+        .verification-status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .status-verified {
+            background: #00b894;
+            color: white;
+        }
+
+        .status-pending {
+            background: #fdcb6e;
+            color: white;
+        }
+
+        .status-failed {
+            background: #e17055;
+            color: white;
+        }
+
+        .attention-panel {
+            background: #ffeaa7;
+            color: #d63031;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: center;
+            font-weight: bold;
+            display: none;
+        }
+
+        .session-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f4fd;
+            border-radius: 10px;
+            border-left: 5px solid #0984e3;
+        }
+
+        @media (max-width: 768px) {
+            .verification-panel {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎓 Verificación de Identidad</h1>
+        <p>Sistema de autenticación para educación virtual</p>
+    </div>
+
+    <div class="container">
+        <div id="status">
+            <span class="loading"></span> Cargando modelos de inteligencia artificial...
+        </div>
+
+        <div class="config-panel">
+            <label>
+                <input type="checkbox" id="autoVerify" checked>
+                <span>Verificación automática de identidad</span>
+            </label>
+            <label>
+                <input type="checkbox" id="alertMode" checked>
+                <span>Alertas para intentos de suplantación</span>
+            </label>
+            <label>
+                <span>Umbral de verificación (%):</span>
+                <input type="number" id="verificationThreshold" value="80" min="60" max="95">
+            </label>
+        </div>
+
+        <div class="video-container">
+            <video id="video" width="640" height="480" autoplay muted playsinline></video>
+        </div>
+
+        <div id="attentionPanel" class="attention-panel">
+            ⚠️ ALERTA: Posible intento de suplantación de identidad detectado
+        </div>
+
+        <div class="controls">
+            <button id="btnStart" class="btn btn-primary" onclick="iniciarCamara()">
+                📹 Iniciar Verificación
+            </button>
+            <button id="btnStop" class="btn btn-danger hidden" onclick="detenerCamara()">
+                ⏹️ Detener
+            </button>
+            <button id="btnRegisterStudent" class="btn btn-success hidden" onclick="registrarEstudiante()">
+                👤 Registrar Estudiante
+            </button>
+            <button id="btnManualVerify" class="btn btn-warning hidden" onclick="verificacionManual()">
+                ✅ Verificación Manual
+            </button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Estudiantes Detectados</h3>
+                <p id="faceCount">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Estado</h3>
+                <p id="statusText">Inactivo</p>
+            </div>
+            <div class="stat-card success">
+                <h3>Verificados</h3>
+                <p id="verifiedCount">0</p>
+            </div>
+            <div class="stat-card warning">
+                <h3>Pendientes</h3>
+                <p id="pendingCount">0</p>
+            </div>
+        </div>
+
+        <div class="session-info">
+            <h3>📚 Sesión de Clase Actual</h3>
+            <p><strong>Materia:</strong> Matemáticas Avanzadas</p>
+            <p><strong>Profesor:</strong> Dr. Carlos Mendoza</p>
+            <p><strong>Horario:</strong> Lunes y Miércoles 10:00 - 12:00</p>
+            <p><strong>Estudiantes esperados:</strong> <span id="expectedStudents">15</span></p>
+        </div>
+
+        <div class="verification-panel">
+            <div class="verification-card">
+                <h3>✅ Estudiantes Verificados</h3>
+                <div class="student-list" id="verifiedStudents">
+                    <!-- Lista de estudiantes verificados -->
+                </div>
+            </div>
+
+            <div class="verification-card">
+                <h3>⏳ Estudiantes Pendientes</h3>
+                <div class="student-list" id="pendingStudents">
+                    <!-- Lista de estudiantes pendientes -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const statusDiv = document.getElementById('status');
+        const btnStart = document.getElementById('btnStart');
+        const btnStop = document.getElementById('btnStop');
+        const btnRegisterStudent = document.getElementById('btnRegisterStudent');
+        const btnManualVerify = document.getElementById('btnManualVerify');
+        const faceCountEl = document.getElementById('faceCount');
+        const statusTextEl = document.getElementById('statusText');
+        const verifiedCountEl = document.getElementById('verifiedCount');
+        const pendingCountEl = document.getElementById('pendingCount');
+        const attentionPanel = document.getElementById('attentionPanel');
+        const expectedStudentsEl = document.getElementById('expectedStudents');
+        const verifiedStudentsDiv = document.getElementById('verifiedStudents');
+        const pendingStudentsDiv = document.getElementById('pendingStudents');
+        const autoVerifyCheck = document.getElementById('autoVerify');
+        const alertModeCheck = document.getElementById('alertMode');
+        const verificationThresholdInput = document.getElementById('verificationThreshold');
+
+        let stream = null;
+        let detectionInterval = null;
+        let estudiantesVerificados = 0;
+        let estudiantesPendientes = 0;
+        let alertaActiva = false;
+        let estudiantesRegistrados = [];
+        let estudiantesEnSesion = [];
+
+        // Cargar modelos desde carpeta local
+        async function loadModels() {
+            statusDiv.innerHTML = '<span class="loading"></span> Cargando modelos de IA... (puede tardar un momento)';
+            
+            try {
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri('./models'),
+                    faceapi.nets.faceLandmark68Net.loadFromUri('./models'),
+                    faceapi.nets.faceRecognitionNet.loadFromUri('./models'),
+                    faceapi.nets.faceExpressionNet.loadFromUri('./models'),
+                    faceapi.nets.ageGenderNet.loadFromUri('./models')
+                ]);
+                
+                statusDiv.innerHTML = '✅ Modelos cargados correctamente - Presiona "Iniciar Verificación"';
+                btnStart.disabled = false;
+                
+                // Cargar estudiantes registrados (simulación)
+                cargarEstudiantesRegistrados();
+                
+            } catch (err) {
+                console.error('Error al cargar modelos:', err);
+                statusDiv.innerHTML = '❌ Error al cargar modelos: ' + err.message;
+            }
+        }
+
+        // Simular carga de estudiantes registrados
+        function cargarEstudiantesRegistrados() {
+            // En un sistema real, esto vendría de una base de datos
+            estudiantesRegistrados = [
+                { id: "EST001", nombre: "Ana García", edad: 20, genero: "Femenino", foto: "ana.jpg" },
+                { id: "EST002", nombre: "Luis Martínez", edad: 22, genero: "Masculino", foto: "luis.jpg" },
+                { id: "EST003", nombre: "María López", edad: 21, genero: "Femenino", foto: "maria.jpg" },
+                { id: "EST004", nombre: "Carlos Rodríguez", edad: 23, genero: "Masculino", foto: "carlos.jpg" },
+                { id: "EST005", nombre: "Sofía Hernández", edad: 20, genero: "Femenino", foto: "sofia.jpg" }
+            ];
+            expectedStudentsEl.textContent = estudiantesRegistrados.length;
+            console.log("Estudiantes registrados cargados:", estudiantesRegistrados.length);
+        }
+
+        // Iniciar cámara
+        async function iniciarCamara() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
+                });
+                
+                video.srcObject = stream;
+                statusDiv.innerHTML = '✅ Verificación activa - Identificando estudiantes...';
+                statusTextEl.textContent = 'Verificando';
+                
+                btnStart.classList.add('hidden');
+                btnStop.classList.remove('hidden');
+                btnRegisterStudent.classList.remove('hidden');
+                btnManualVerify.classList.remove('hidden');
+                
+                iniciarDeteccion();
+                
+            } catch (err) {
+                console.error('Error al acceder a la cámara:', err);
+                statusDiv.innerHTML = '❌ Error: No se pudo acceder a la cámara';
+                alert('No se pudo acceder a la cámara. Verifica los permisos.');
+            }
+        }
+
+        // Detener cámara
+        function detenerCamara() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+            
+            video.srcObject = null;
+            statusDiv.innerHTML = '⏹️ Verificación detenida';
+            statusTextEl.textContent = 'Inactivo';
+            faceCountEl.textContent = '0';
+            
+            btnStart.classList.remove('hidden');
+            btnStop.classList.add('hidden');
+            btnRegisterStudent.classList.add('hidden');
+            btnManualVerify.classList.add('hidden');
+            
+            const canvas = document.querySelector('canvas');
+            if (canvas) canvas.remove();
+            
+            // Ocultar alerta si está activa
+            attentionPanel.style.display = 'none';
+            alertaActiva = false;
+        }
+
+        // Función para dibujar texto con fondo
+        function drawTextWithBackground(ctx, text, x, y, fontSize = 16, color = 'white') {
+            ctx.font = `${fontSize}px Arial`;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            
+            const textMetrics = ctx.measureText(text);
+            const textWidth = textMetrics.width;
+            const textHeight = fontSize;
+            
+            ctx.fillRect(x - 5, y - textHeight, textWidth + 10, textHeight + 8);
+            
+            ctx.fillStyle = color;
+            ctx.fillText(text, x, y);
+        }
+
+        // Iniciar detección en tiempo real
+        function iniciarDeteccion() {
+            video.addEventListener('play', () => {
+                const canvas = faceapi.createCanvasFromMedia(video);
+                document.querySelector('.video-container').append(canvas);
+                
+                const displaySize = { width: video.videoWidth, height: video.videoHeight };
+                faceapi.matchDimensions(canvas, displaySize);
+                
+                detectionInterval = setInterval(async () => {
+                    const detections = await faceapi
+                        .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+                        .withFaceLandmarks()
+                        .withFaceExpressions()
+                        .withAgeAndGender();
+                    
+                    const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    faceCountEl.textContent = detections.length;
+                    
+                    faceapi.draw.drawDetections(canvas, resizedDetections);
+                    faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+                    
+                    resizedDetections.forEach(detection => {
+                        const { age, gender, genderProbability, expressions } = detection;
+                        const box = detection.detection.box;
+                        
+                        // Verificar identidad del estudiante
+                        const verificacion = verificarIdentidadEstudiante(Math.round(age), gender);
+                        const estudianteIdentificado = verificacion.estudiante;
+                        const nivelConfianza = verificacion.confianza;
+                        const esVerificado = nivelConfianza >= (parseInt(verificationThresholdInput.value) || 80);
+                        
+                        let textY = box.bottomLeft.y + 25;
+                        const textX = box.bottomLeft.x;
+                        
+                        // Dibujar estado de verificación
+                        const estadoVerificacion = esVerificado ? "ESTUDIANTE VERIFICADO" : 
+                                                 estudianteIdentificado ? "VERIFICACIÓN PENDIENTE" : "IDENTIDAD DESCONOCIDA";
+                        const colorEstado = esVerificado ? '#00b894' : 
+                                          estudianteIdentificado ? '#fdcb6e' : '#e17055';
+                        
+                        drawTextWithBackground(ctx, estadoVerificacion, textX, textY, 18, colorEstado);
+                        textY += 30;
+                        
+                        if (estudianteIdentificado) {
+                            drawTextWithBackground(ctx, `Nombre: ${estudianteIdentificado.nombre}`, textX, textY, 18);
+                            textY += 30;
+                        }
+                        
+                        drawTextWithBackground(ctx, `Edad: ${Math.round(age)} años`, textX, textY, 18);
+                        textY += 30;
+                        
+                        const genderText = `Género: ${gender === 'male' ? 'Masculino' : 'Femenino'}`;
+                        drawTextWithBackground(ctx, genderText, textX, textY, 18);
+                        textY += 30;
+                        
+                        if (estudianteIdentificado) {
+                            drawTextWithBackground(ctx, `Confianza: ${nivelConfianza}%`, textX, textY, 16,
+                                                  nivelConfianza > 80 ? '#00b894' : '#fdcb6e');
+                        }
+                        
+                        // Procesar verificación
+                        if (autoVerifyCheck.checked && estudianteIdentificado) {
+                            procesarVerificacion(estudianteIdentificado, esVerificado, nivelConfianza);
+                        }
+                    });
+                    
+                }, 1000);
+            });
+        }
+
+        // Verificar identidad del estudiante
+        function verificarIdentidadEstudiante(edad, genero) {
+            const generoTexto = genero === 'male' ? 'Masculino' : 'Femenino';
+            let mejorCoincidencia = null;
+            let mejorConfianza = 0;
+            
+            // Buscar coincidencia en estudiantes registrados
+            estudiantesRegistrados.forEach(estudiante => {
+                // Calcular confianza basada en edad y género
+                let confianza = 0;
+                
+                // Coincidencia de género (40% del puntaje)
+                if (estudiante.genero === generoTexto) {
+                    confianza += 40;
+                }
+                
+                // Coincidencia de edad (60% del puntaje)
+                const diferenciaEdad = Math.abs(estudiante.edad - edad);
+                if (diferenciaEdad <= 2) {
+                    confianza += 60;
+                } else if (diferenciaEdad <= 5) {
+                    confianza += 40;
+                } else if (diferenciaEdad <= 10) {
+                    confianza += 20;
+                }
+                
+                // Actualizar mejor coincidencia
+                if (confianza > mejorConfianza) {
+                    mejorConfianza = confianza;
+                    mejorCoincidencia = estudiante;
+                }
+            });
+            
+            return {
+                estudiante: mejorCoincidencia,
+                confianza: mejorConfianza
+            };
+        }
+
+        // Procesar verificación de estudiante
+        function procesarVerificacion(estudiante, esVerificado, confianza) {
+            // Verificar si el estudiante ya está en sesión
+            const yaEnSesion = estudiantesEnSesion.some(e => e.id === estudiante.id);
+            
+            if (!yaEnSesion) {
+                if (esVerificado) {
+                    // Estudiante verificado
+                    estudiantesVerificados++;
+                    verifiedCountEl.textContent = estudiantesVerificados;
+                    
+                    estudiantesEnSesion.push({
+                        ...estudiante,
+                        timestamp: new Date().toLocaleString(),
+                        estado: 'verificado',
+                        confianza: confianza
+                    });
+                    
+                    agregarEstudianteLista(estudiante, 'verificado');
+                    
+                    console.log(`✅ Estudiante verificado: ${estudiante.nombre} (${confianza}%)`);
+                    
+                } else {
+                    // Estudiante pendiente de verificación
+                    estudiantesPendientes++;
+                    pendingCountEl.textContent = estudiantesPendientes;
+                    
+                    estudiantesEnSesion.push({
+                        ...estudiante,
+                        timestamp: new Date().toLocaleString(),
+                        estado: 'pendiente',
+                        confianza: confianza
+                    });
+                    
+                    agregarEstudianteLista(estudiante, 'pendiente');
+                    
+                    console.log(`⏳ Estudiante pendiente: ${estudiante.nombre} (${confianza}%)`);
+                    
+                    // Activar alerta si la confianza es muy baja
+                    if (alertModeCheck.checked && confianza < 50 && !alertaActiva) {
+                        activarAlerta();
+                    }
+                }
+                
+                // Guardar registro de asistencia
+                guardarRegistroAsistencia(estudiante, esVerificado ? 'verificado' : 'pendiente', confianza);
+            }
+        }
+
+        // Agregar estudiante a la lista correspondiente
+        function agregarEstudianteLista(estudiante, estado) {
+            const studentItem = document.createElement('div');
+            studentItem.className = 'student-item';
+            
+            const statusClass = estado === 'verificado' ? 'status-verified' : 
+                              estado === 'pendiente' ? 'status-pending' : 'status-failed';
+            const statusText = estado === 'verificado' ? 'VERIFICADO' : 
+                             estado === 'pendiente' ? 'PENDIENTE' : 'FALLIDO';
+            
+            studentItem.innerHTML = `
+                <div>
+                    <strong>${estudiante.nombre}</strong><br>
+                    <small>ID: ${estudiante.id} - ${estudiante.edad} años</small>
+                </div>
+                <span class="verification-status ${statusClass}">${statusText}</span>
+            `;
+            
+            if (estado === 'verificado') {
+                verifiedStudentsDiv.appendChild(studentItem);
+            } else {
+                pendingStudentsDiv.appendChild(studentItem);
+            }
+            
+            // Limitar a 10 estudiantes visibles por lista
+            const list = estado === 'verificado' ? verifiedStudentsDiv : pendingStudentsDiv;
+            if (list.children.length > 10) {
+                list.removeChild(list.lastChild);
+            }
+        }
+
+        // Activar alerta de seguridad
+        function activarAlerta() {
+            alertaActiva = true;
+            attentionPanel.style.display = 'block';
+            
+            console.log("⚠️ ALERTA: Posible intento de suplantación detectado");
+            
+            // Apagar alerta después de 5 segundos
+            setTimeout(() => {
+                attentionPanel.style.display = 'none';
+                alertaActiva = false;
+            }, 5000);
+        }
+
+        // Guardar registro de asistencia
+        function guardarRegistroAsistencia(estudiante, estado, confianza) {
+            const registro = {
+                idEstudiante: estudiante.id,
+                nombre: estudiante.nombre,
+                estado: estado,
+                confianza: confianza,
+                timestamp: new Date().toLocaleString(),
+                materia: 'Matemáticas Avanzadas'
+            };
+            
+            // Simular guardado en Google Sheets
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Registro de asistencia guardado:', result);
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error al guardar registro:', error);
+                })
+                .guardarRegistroAsistencia(registro);
+        }
+
+        // Registrar nuevo estudiante
+        function registrarEstudiante() {
+            const nombre = prompt("Ingrese el nombre del estudiante:");
+            const edad = prompt("Ingrese la edad del estudiante:");
+            const genero = prompt("Ingrese el género (Masculino/Femenino):");
+            
+            if (nombre && edad && genero) {
+                const nuevoEstudiante = {
+                    id: `EST${String(estudiantesRegistrados.length + 1).padStart(3, '0')}`,
+                    nombre: nombre,
+                    edad: parseInt(edad),
+                    genero: genero,
+                    foto: `${nombre.toLowerCase().replace(/\s/g, '')}.jpg`
+                };
+                
+                estudiantesRegistrados.push(nuevoEstudiante);
+                expectedStudentsEl.textContent = estudiantesRegistrados.length;
+                
+                alert(`Estudiante ${nombre} registrado exitosamente con ID: ${nuevoEstudiante.id}`);
+                console.log('Nuevo estudiante registrado:', nuevoEstudiante);
+            }
+        }
+
+        // Verificación manual
+        function verificacionManual() {
+            if (estudiantesEnSesion.length === 0) {
+                alert("No hay estudiantes detectados para verificar manualmente");
+                return;
+            }
+            
+            const estudiantesPendientes = estudiantesEnSesion.filter(e => e.estado === 'pendiente');
+            if (estudiantesPendientes.length === 0) {
+                alert("No hay estudiantes pendientes de verificación");
+                return;
+            }
+            
+            let mensaje = "Estudiantes pendientes de verificación:\n\n";
+            estudiantesPendientes.forEach((est, index) => {
+                mensaje += `${index + 1}. ${est.nombre} (ID: ${est.id}) - Confianza: ${est.confianza}%\n`;
+            });
+            
+            const seleccion = prompt(`${mensaje}\nIngrese el número del estudiante a verificar manualmente:`);
+            const indice = parseInt(seleccion) - 1;
+            
+            if (indice >= 0 && indice < estudiantesPendientes.length) {
+                const estudiante = estudiantesPendientes[indice];
+                
+                // Cambiar estado a verificado
+                estudiante.estado = 'verificado';
+                estudiantesVerificados++;
+                estudiantesPendientes--;
+                
+                verifiedCountEl.textContent = estudiantesVerificados;
+                pendingCountEl.textContent = estudiantesPendientes;
+                
+                // Actualizar listas
+                actualizarListasEstudiantes();
+                
+                alert(`Estudiante ${estudiante.nombre} verificado manualmente`);
+                console.log(`✅ Verificación manual: ${estudiante.nombre}`);
+            }
+        }
+
+        // Actualizar listas de estudiantes
+        function actualizarListasEstudiantes() {
+            // Limpiar listas
+            verifiedStudentsDiv.innerHTML = '';
+            pendingStudentsDiv.innerHTML = '';
+            
+            // Volver a agregar estudiantes
+            estudiantesEnSesion.forEach(estudiante => {
+                agregarEstudianteLista(estudiante, estudiante.estado);
+            });
+        }
+
+        // Iniciar carga de modelos al cargar la página
+        window.addEventListener('load', () => {
+            console.log('Página cargada, iniciando carga de modelos...');
+            loadModels();
+        });
+    </script>
+</body>
+</html>

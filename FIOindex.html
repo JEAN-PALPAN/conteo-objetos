@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reconocimiento Facial - Apps Script</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .header {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+        }
+
+        .video-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            border-radius: 15px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        video {
+            width: 100%;
+            max-width: 640px;
+            border-radius: 15px;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #status {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(235, 51, 73, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-card h3 {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-card p {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .stat-card.success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .stat-card.success h3,
+        .stat-card.success p {
+            color: white;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .config-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .config-panel label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .config-panel input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .config-panel input[type="number"] {
+            width: 80px;
+            padding: 5px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎭 Reconocimiento Facial IA</h1>
+        <p>Detección y registro automático en tiempo real</p>
+    </div>
+
+    <div class="container">
+        <div id="status">
+            <span class="loading"></span> Cargando modelos de inteligencia artificial...
+        </div>
+
+        <div class="config-panel">
+            <label>
+                <input type="checkbox" id="autoSave" checked>
+                <span>Guardar automáticamente en Google Sheets</span>
+            </label>
+            <label>
+                <span>Intervalo de guardado (segundos):</span>
+                <input type="number" id="saveInterval" value="5" min="3" max="60">
+            </label>
+        </div>
+
+        <div class="video-container">
+            <video id="video" width="640" height="480" autoplay muted playsinline></video>
+        </div>
+
+        <div class="controls">
+            <button id="btnStart" class="btn btn-primary" onclick="iniciarCamara()">
+                📹 Iniciar Cámara
+            </button>
+            <button id="btnStop" class="btn btn-danger hidden" onclick="detenerCamara()">
+                ⏹️ Detener
+            </button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Rostros Detectados</h3>
+                <p id="faceCount">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Estado</h3>
+                <p id="statusText">Inactivo</p>
+            </div>
+            <div class="stat-card success">
+                <h3>Registros Guardados</h3>
+                <p id="savedCount">0</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const statusDiv = document.getElementById('status');
+        const btnStart = document.getElementById('btnStart');
+        const btnStop = document.getElementById('btnStop');
+        const faceCountEl = document.getElementById('faceCount');
+        const statusTextEl = document.getElementById('statusText');
+        const savedCountEl = document.getElementById('savedCount');
+        const autoSaveCheck = document.getElementById('autoSave');
+        const saveIntervalInput = document.getElementById('saveInterval');
+
+        let stream = null;
+        let detectionInterval = null;
+        let saveInterval = null;
+        let ultimasDetecciones = [];
+        let totalGuardados = 0;
+        let ultimoGuardado = 0;
+
+        // Cargar modelos desde CDN
+        async function loadModels() {
+            statusDiv.innerHTML = '<span class="loading"></span> Cargando modelos de IA... (puede tardar un momento)';
+            
+            const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+            
+            try {
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+                    faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
+                ]);
+                
+                statusDiv.innerHTML = '✅ Modelos cargados correctamente - Presiona "Iniciar Cámara"';
+                btnStart.disabled = false;
+                
+            } catch (err) {
+                console.error('Error al cargar modelos:', err);
+                statusDiv.innerHTML = '❌ Error al cargar modelos: ' + err.message;
+            }
+        }
+
+        // Iniciar cámara
+        async function iniciarCamara() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
+                });
+                
+                video.srcObject = stream;
+                statusDiv.innerHTML = '✅ Cámara activa - Detectando y guardando rostros automáticamente...';
+                statusTextEl.textContent = 'Activo';
+                
+                btnStart.classList.add('hidden');
+                btnStop.classList.remove('hidden');
+                
+                iniciarDeteccion();
+                iniciarGuardadoAutomatico();
+                
+            } catch (err) {
+                console.error('Error al acceder a la cámara:', err);
+                statusDiv.innerHTML = '❌ Error: No se pudo acceder a la cámara';
+                alert('No se pudo acceder a la cámara. Verifica los permisos.');
+            }
+        }
+
+        // Detener cámara
+        function detenerCamara() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+
+            if (saveInterval) {
+                clearInterval(saveInterval);
+                saveInterval = null;
+            }
+            
+            video.srcObject = null;
+            statusDiv.innerHTML = '⏹️ Cámara detenida';
+            statusTextEl.textContent = 'Inactivo';
+            faceCountEl.textContent = '0';
+            
+            btnStart.classList.remove('hidden');
+            btnStop.classList.add('hidden');
+            
+            const canvas = document.querySelector('canvas');
+            if (canvas) canvas.remove();
+        }
+
+        // Función para dibujar texto con fondo
+        function drawTextWithBackground(ctx, text, x, y, fontSize = 16) {
+            ctx.font = `${fontSize}px Arial`;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            
+            const textMetrics = ctx.measureText(text);
+            const textWidth = textMetrics.width;
+            const textHeight = fontSize;
+            
+            ctx.fillRect(x - 5, y - textHeight, textWidth + 10, textHeight + 8);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(text, x, y);
+        }
+
+        // Iniciar detección en tiempo real
+        function iniciarDeteccion() {
+            video.addEventListener('play', () => {
+                const canvas = faceapi.createCanvasFromMedia(video);
+                document.querySelector('.video-container').append(canvas);
+                
+                const displaySize = { width: video.videoWidth, height: video.videoHeight };
+                faceapi.matchDimensions(canvas, displaySize);
+                
+                detectionInterval = setInterval(async () => {
+                    const detections = await faceapi
+                        .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+                        .withFaceLandmarks()
+                        .withFaceExpressions()
+                        .withAgeAndGender();
+                    
+                    const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    faceCountEl.textContent = detections.length;
+                    
+                    // Limpiar array de detecciones anteriores
+                    ultimasDetecciones = [];
+                    
+                    faceapi.draw.drawDetections(canvas, resizedDetections);
+                    faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+                    
+                    resizedDetections.forEach(detection => {
+                        const { age, gender, genderProbability, expressions } = detection;
+                        const box = detection.detection.box;
+                        
+                        let textY = box.bottomLeft.y + 25;
+                        const textX = box.bottomLeft.x;
+                        
+                        drawTextWithBackground(ctx, `Edad: ${Math.round(age)} años`, textX, textY, 18);
+                        textY += 30;
+                        
+                        const genderText = `Género: ${gender === 'male' ? 'Masculino' : 'Femenino'} (${Math.round(genderProbability * 100)}%)`;
+                        drawTextWithBackground(ctx, genderText, textX, textY, 18);
+                        textY += 35;
+                        
+                        const expressionEntries = Object.entries(expressions);
+                        const sortedExpressions = expressionEntries.sort((a, b) => b[1] - a[1]);
+                        
+                        const expressionNames = {
+                            neutral: 'Neutral',
+                            happy: 'Feliz',
+                            sad: 'Triste',
+                            angry: 'Enojado',
+                            fearful: 'Asustado',
+                            disgusted: 'Disgustado',
+                            surprised: 'Sorprendido'
+                        };
+                        
+                        drawTextWithBackground(ctx, 'Expresiones:', textX, textY, 16);
+                        textY += 25;
+                        
+                        for (let i = 0; i < 3; i++) {
+                            const [expression, probability] = sortedExpressions[i];
+                            const expressionText = `  ${expressionNames[expression]}: ${Math.round(probability * 100)}%`;
+                            drawTextWithBackground(ctx, expressionText, textX, textY, 14);
+                            textY += 22;
+                        }
+                        
+                        // Guardar detección actual
+                        ultimasDetecciones.push({
+                            edad: Math.round(age),
+                            genero: gender === 'male' ? 'Masculino' : 'Femenino',
+                            expresion: expressionNames[sortedExpressions[0][0]],
+                            confianza: Math.round(sortedExpressions[0][1] * 100),
+                            numeroRostros: detections.length
+                        });
+                    });
+                    
+                }, 100);
+            });
+        }
+
+        // Iniciar guardado automático
+        function iniciarGuardadoAutomatico() {
+            const intervaloSegundos = parseInt(saveIntervalInput.value) || 5;
+            
+            saveInterval = setInterval(() => {
+                if (autoSaveCheck.checked && ultimasDetecciones.length > 0) {
+                    guardarDatosAutomatico();
+                }
+            }, intervaloSegundos * 1000);
+        }
+
+        // Guardar datos automáticamente
+        function guardarDatosAutomatico() {
+            const ahora = Date.now();
+            
+            // Evitar guardados muy seguidos (mínimo 2 segundos)
+            if (ahora - ultimoGuardado < 2000) {
+                return;
+            }
+            
+            if (ultimasDetecciones.length === 0) {
+                return;
+            }
+            
+            ultimoGuardado = ahora;
+            
+            // Mostrar indicador de guardado
+            statusDiv.innerHTML = '💾 Guardando detecciones...';
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result.success) {
+                        totalGuardados += ultimasDetecciones.length;
+                        savedCountEl.textContent = totalGuardados;
+                        statusDiv.innerHTML = '✅ Datos guardados - Detectando rostros...';
+                        console.log('✅ Guardado exitoso:', result.mensaje);
+                    } else {
+                        statusDiv.innerHTML = '⚠️ Error al guardar - Continuando detección...';
+                        console.error('Error al guardar:', result.error);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    statusDiv.innerHTML = '⚠️ Error de conexión - Continuando detección...';
+                    console.error('Error de conexión:', error.message);
+                })
+                .guardarDeteccionesMultiples(ultimasDetecciones);
+        }
+
+        // Iniciar carga de modelos al cargar la página
+        window.addEventListener('load', () => {
+            console.log('Página cargada, iniciando carga de modelos...');
+            loadModels();
+        });
+    </script>
+</body>
+</html>
