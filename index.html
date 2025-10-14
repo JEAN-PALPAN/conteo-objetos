@@ -1,807 +1,772 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Detector Inteligente de Objetos</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            min-height: 100vh; display: flex; flex-direction: column;
-            padding: 20px; color: #e2e8f0;
-        }
-        .container {
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            border-radius: 16px; padding: 30px;
-            backdrop-filter: blur(20px);
-            width: 100%; max-width: 1400px; margin: 0 auto;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
-        }
-        .header {
-            text-align: center; margin-bottom: 30px;
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(168, 85, 247, 0.1));
-            padding: 20px; border-radius: 12px;
-            border: 1px solid rgba(59, 130, 246, 0.2);
-        }
-        .header h1 {
-            font-size: 2.2em; margin-bottom: 8px;
-            background: linear-gradient(135deg, #60a5fa, #a78bfa);
-            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-            font-weight: 700;
-        }
-        .tabs {
-            display: flex; gap: 12px; margin-bottom: 25px; flex-wrap: wrap;
-            justify-content: center;
-        }
-        .tab {
-            padding: 11px 22px; border: 1px solid rgba(59, 130, 246, 0.3);
-            border-radius: 10px; background: rgba(30, 41, 59, 0.6);
-            color: #cbd5e1; cursor: pointer; font-weight: 500;
-            transition: all 0.3s ease; font-size: 0.95em;
-        }
-        .tab:hover { background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.5); }
-        .tab.active { background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            border-color: #8b5cf6; color: white; }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Detector Inteligente de Objetos</title>
+  <!-- TFJS + COCO-SSD -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
 
-        .video-container {
-            position: relative; width: 100%; max-width: 900px; margin: 0 auto 20px;
-            border-radius: 14px; overflow: hidden;
-            background: #000; border: 1px solid rgba(59, 130, 246, 0.2);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-            aspect-ratio: 16/9;
-        }
-        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        video { display: block; }
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      min-height: 100vh; display:flex; flex-direction:column; padding:20px; color:#e2e8f0;
+    }
+    .container {
+      background: rgba(15,23,42,0.8); border:1px solid rgba(148,163,184,0.2);
+      border-radius:16px; padding:30px; backdrop-filter: blur(20px);
+      width:100%; max-width:1400px; margin:0 auto; box-shadow:0 25px 50px rgba(0,0,0,.5);
+    }
+    .header {
+      text-align:center; margin-bottom:30px;
+      background: linear-gradient(135deg, rgba(59,130,246,.1), rgba(168,85,247,.1));
+      padding:20px; border-radius:12px; border:1px solid rgba(59,130,246,.2);
+    }
+    .header h1 {
+      font-size:2.2em; margin-bottom:8px;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+      font-weight:700;
+    }
+    .tabs { display:flex; gap:12px; margin-bottom:25px; flex-wrap:wrap; justify-content:center; }
+    .tab { padding:11px 22px; border:1px solid rgba(59,130,246,.3); border-radius:10px; background:rgba(30,41,59,.6); color:#cbd5e1; cursor:pointer; font-weight:500; transition:all .3s; font-size:.95em; }
+    .tab:hover { background: rgba(59,130,246,.2); border-color: rgba(59,130,246,.5); }
+    .tab.active { background: linear-gradient(135deg,#3b82f6,#8b5cf6); border-color:#8b5cf6; color:white; }
 
-        .controls {
-            display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
-            margin: 20px 0;
-        }
-        .btn {
-            padding: 12px 24px; border: none; border-radius: 10px;
-            font-size: 0.95em; font-weight: 600; cursor: pointer;
-            transition: all 0.3s ease; display: inline-flex;
-            align-items: center; gap: 8px; color: white;
-        }
-        .btn-primary { background: linear-gradient(135deg, #10b981, #059669);
-            border: 1px solid rgba(16, 185, 129, 0.3); }
-        .btn-secondary { background: linear-gradient(135deg, #3b82f6, #2563eb);
-            border: 1px solid rgba(59, 130, 246, 0.3); }
-        .btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626);
-            border: 1px solid rgba(239, 68, 68, 0.3); }
-        .btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .video-container {
+      position:relative; width:100%; max-width:900px; margin:0 auto 20px;
+      border-radius:14px; overflow:hidden; background:#000; border:1px solid rgba(59,130,246,.2);
+      box-shadow:0 20px 40px rgba(0,0,0,.4); aspect-ratio: 16/9;
+    }
+    video, canvas { position:absolute; inset:0; width:100%; height:100%; }
+    video { display:block; background:#000; object-fit: contain; }
 
-        .settings-panel {
-            background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 12px; padding: 20px; margin: 20px 0;
-        }
-        .setting-group {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px; margin-top: 15px;
-        }
-        .setting-item {
-            background: rgba(15, 23, 42, 0.5); padding: 12px; border-radius: 8px;
-            border: 1px solid rgba(148, 163, 184, 0.1);
-        }
-        .setting-label { font-size: 0.85em; color: #94a3b8; margin-bottom: 6px; display: block; }
-        input[type="range"], input[type="file"] {
-            width: 100%; background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px;
-            padding: 8px; color: #e2e8f0;
-        }
-        input[type="range"] { padding: 0; height: 6px; accent-color: #3b82f6; }
+    .image-stage {
+      position:relative; width:100%; max-width:900px; margin:0 auto 20px;
+      border-radius:14px; overflow:hidden; background:#000; border:1px solid rgba(59,130,246,.2);
+      box-shadow:0 20px 40px rgba(0,0,0,.4); min-height:200px;
+    }
+    .img-el, .img-canvas { position:absolute; inset:0; width:100%; height:100%; object-fit: contain; }
 
-        .status {
-            text-align: center; padding: 15px; border-radius: 10px;
-            margin: 20px 0; font-weight: 500; border: 1px solid;
-        }
-        .status-loading { background: rgba(217, 119, 6, 0.1);
-            color: #fbbf24; border-color: rgba(217, 119, 6, 0.3); }
-        .status-success { background: rgba(16, 185, 129, 0.1);
-            color: #6ee7b7; border-color: rgba(16, 185, 129, 0.3); }
-        .status-error { background: rgba(239, 68, 68, 0.1);
-            color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
+    .controls { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin:20px 0; }
+    .btn { padding:12px 24px; border:none; border-radius:10px; font-size:.95em; font-weight:600; cursor:pointer; transition:all .3s; display:inline-flex; align-items:center; gap:8px; color:white; }
+    .btn-primary { background: linear-gradient(135deg, #10b981, #059669); border:1px solid rgba(16,185,129,.3); }
+    .btn-secondary { background: linear-gradient(135deg, #3b82f6, #2563eb); border:1px solid rgba(59,130,246,.3); }
+    .btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); border:1px solid rgba(239,68,68,.3); }
+    .btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
 
-        .stats-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px; margin: 20px 0;
-        }
-        .stat-card {
-            background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(59, 130, 246, 0.2);
-            padding: 18px; border-radius: 12px; text-align: center;
-        }
-        .stat-card h3 { font-size: 0.85em; color: #94a3b8; margin-bottom: 8px; }
-        .stat-card .number { font-size: 2.2em; font-weight: 700;
-            background: linear-gradient(135deg, #60a5fa, #a78bfa);
-            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .settings-panel { background:rgba(30,41,59,.6); border:1px solid rgba(59,130,246,.2); border-radius:12px; padding:20px; margin:20px 0; }
+    .setting-group { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-top:15px; }
+    .setting-item { background: rgba(15,23,42,.5); padding:12px; border-radius:8px; border:1px solid rgba(148,163,184,.1); }
+    .setting-label { font-size:.85em; color:#94a3b8; margin-bottom:6px; display:block; }
+    input[type="range"], input[type="file"] { width:100%; background: rgba(59,130,246,.1); border:1px solid rgba(59,130,246,.3); border-radius:6px; padding:8px; color:#e2e8f0; }
+    input[type="range"] { padding:0; height:6px; accent-color:#3b82f6; }
 
-        .objects-grid {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 12px; margin: 20px 0;
-        }
-        .object-card {
-            background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 10px; padding: 15px;
-        }
-        .object-name { font-weight: 600; color: #60a5fa; margin-bottom: 6px; font-size: 0.95em; }
-        .object-count { font-size: 1.8em; font-weight: 700; color: #10b981; }
-        .object-info { color: #94a3b8; font-size: 0.85em; margin-top: 8px; }
+    .status { text-align:center; padding:15px; border-radius:10px; margin:20px 0; font-weight:500; border:1px solid; }
+    .status-loading { background: rgba(217,119,6,.1); color:#fbbf24; border-color: rgba(217,119,6,.3); }
+    .status-success { background: rgba(16,185,129,.1); color:#6ee7b7; border-color: rgba(16,185,129,.3); }
+    .status-error { background: rgba(239,68,68,.1); color:#fca5a5; border-color: rgba(239,68,68,.3); }
 
-        .database-section {
-            background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 12px; padding: 20px; margin-top: 20px;
-        }
-        .history-list {
-            max-height: 400px; overflow-y: auto; margin-top: 15px;
-        }
-        .history-item {
-            background: rgba(15, 23, 42, 0.5); padding: 12px; border-radius: 8px;
-            margin-bottom: 10px; border-left: 3px solid #3b82f6;
-            border: 1px solid rgba(148, 163, 184, 0.1);
-        }
-        .loading {
-            display: inline-block; width: 16px; height: 16px;
-            border: 2px solid rgba(255,255,255,.3); border-radius: 50%;
-            border-top-color: white; animation: spin 1s ease-in-out infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .hidden { display: none; }
+    .stats-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:15px; margin:20px 0; }
+    .stat-card { background:rgba(30,41,59,.6); border:1px solid rgba(59,130,246,.2); padding:18px; border-radius:12px; text-align:center; }
+    .stat-card h3 { font-size:.85em; color:#94a3b8; margin-bottom:8px; }
+    .stat-card .number { font-size:2.2em; font-weight:700; background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color: transparent; }
 
-        .progress-bar {
-            width: 100%; height: 6px; background: rgba(59, 130, 246, 0.1);
-            border-radius: 10px; margin: 15px 0; overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-            width: 0%; transition: width 0.3s ease;
-        }
+    .objects-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(180px,1fr)); gap:12px; margin:20px 0; }
+    .object-card { background:rgba(30,41,59,.6); border:1px solid rgba(59,130,246,.2); border-radius:10px; padding:15px; }
+    .object-name { font-weight:600; color:#60a5fa; margin-bottom:6px; font-size:.95em; }
+    .object-count { font-size:1.8em; font-weight:700; color:#10b981; }
+    .object-info { color:#94a3b8; font-size:.85em; margin-top:8px; }
 
-        .api-status {
-            display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-            margin-right: 8px;
-        }
-        .api-status.connected { background: #10b981; box-shadow: 0 0 8px #10b981; }
-        .api-status.disconnected { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+    .database-section { background:rgba(30,41,59,.6); border:1px solid rgba(59,130,246,.2); border-radius:12px; padding:20px; margin-top:20px; }
+    .history-list { max-height:400px; overflow-y:auto; margin-top:15px; }
+    .history-item { background: rgba(15,23,42,.5); padding:12px; border-radius:8px; margin-bottom:10px; border-left:3px solid #3b82f6; border:1px solid rgba(148,163,184,.1); }
+    .loading { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.3); border-radius:50%; border-top-color:white; animation:spin 1s ease-in-out infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .hidden { display:none; }
 
-        @media (max-width: 768px) {
-            .container { padding: 20px; }
-            .header h1 { font-size: 1.8em; }
-            .objects-grid { grid-template-columns: 1fr 1fr; }
-            .stats-grid { grid-template-columns: 1fr 1fr; }
-        }
-    </style>
+    .progress-bar { width:100%; height:6px; background: rgba(59,130,246,.1); border-radius:10px; margin:15px 0; overflow:hidden; }
+    .progress-fill { height:100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); width:0%; transition: width .2s ease; }
+
+    .api-status { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; }
+    .api-status.connected { background:#10b981; box-shadow:0 0 8px #10b981; }
+    .api-status.disconnected { background:#ef4444; box-shadow:0 0 8px #ef4444; }
+
+    @media (max-width:768px){
+      .container { padding:20px; }
+      .header h1 { font-size:1.8em; }
+      .objects-grid, .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🔍 Detector Inteligente de Objetos</h1>
-            <p style="color: #cbd5e1; margin-bottom: 10px;">Detección en tiempo real con análisis de color y forma</p>
-            <p style="font-size: 0.9em;">
-                <span class="api-status disconnected"></span>
-                <span id="apiStatusText">Verificando...</span>
-            </p>
-        </div>
-
-        <div class="tabs">
-            <button class="tab active" onclick="showTab('camera', this)">📹 Cámara</button>
-            <button class="tab" onclick="showTab('video', this)">🎬 Video</button>
-            <button class="tab" onclick="showTab('image', this)">📷 Imagen</button>
-            <button class="tab" onclick="showTab('database', this)">💾 Base de Datos</button>
-            <button class="tab" onclick="showTab('settings', this)">⚙️ Configuración</button>
-        </div>
-
-        <!-- CÁMARA -->
-        <div id="cameraTab" class="tab-content">
-            <div class="video-container">
-                <video id="cameraVideo" autoplay muted playsinline></video>
-                <canvas id="cameraCanvas"></canvas>
-            </div>
-            <div class="controls">
-                <button class="btn btn-primary" id="btnStartCam" onclick="startCamera()">📹 Iniciar Cámara</button>
-                <button class="btn btn-danger" id="btnStopCam" onclick="stopCamera()" disabled>⏹ Detener</button>
-                <button class="btn btn-secondary" onclick="saveCurrentDetection()">💾 Guardar Detección</button>
-            </div>
-        </div>
-
-        <!-- VIDEO -->
-        <div id="videoTab" class="tab-content hidden">
-            <div class="video-container">
-                <video id="fileVideo" controls></video>
-                <canvas id="fileCanvas"></canvas>
-            </div>
-            <div class="controls">
-                <input type="file" id="videoFile" accept="video/*" style="display: none;">
-                <label for="videoFile" class="btn btn-secondary" style="cursor: pointer;">📁 Seleccionar Video</label>
-                <button class="btn btn-primary" onclick="analyzeVideo()">🔍 Analizar</button>
-                <button class="btn btn-secondary" onclick="saveVideoDetection()">💾 Guardar Resultados</button>
-            </div>
-            <div class="progress-bar"><div class="progress-fill" id="videoProgress"></div></div>
-        </div>
-
-        <!-- IMAGEN -->
-        <div id="imageTab" class="tab-content hidden">
-            <div class="video-container">
-                <canvas id="imageCanvas"></canvas>
-            </div>
-            <div class="controls">
-                <input type="file" id="imageFile" accept="image/*" style="display: none;">
-                <label for="imageFile" class="btn btn-secondary" style="cursor: pointer;">📁 Seleccionar Imagen</label>
-                <button class="btn btn-secondary" onclick="saveImageDetection()">💾 Guardar Resultados</button>
-            </div>
-        </div>
-
-        <!-- CONFIGURACIÓN -->
-        <div id="settingsTab" class="tab-content hidden">
-            <div class="settings-panel">
-                <h3 style="color: #60a5fa; margin-bottom: 15px;">Ajustar Sensibilidad</h3>
-                <div class="setting-group">
-                    <div class="setting-item">
-                        <label class="setting-label">Color Threshold: <span id="colorVal">15</span></label>
-                        <input type="range" id="colorThreshold" min="5" max="30" value="15" step="1"
-                            oninput="DETECTION_CONFIG.COLOR_THRESHOLD = parseInt(this.value); document.getElementById('colorVal').textContent = this.value;">
-                    </div>
-                    <div class="setting-item">
-                        <label class="setting-label">Shape Threshold: <span id="shapeVal">128</span></label>
-                        <input type="range" id="shapeThreshold" min="80" max="200" value="128" step="5"
-                            oninput="DETECTION_CONFIG.SHAPE_THRESHOLD = parseInt(this.value); document.getElementById('shapeVal').textContent = this.value;">
-                    </div>
-                    <div class="setting-item">
-                        <label class="setting-label">Circularidad: <span id="circVal">0.65</span></label>
-                        <input type="range" id="circularity" min="0.5" max="0.9" value="0.65" step="0.05"
-                            oninput="DETECTION_CONFIG.CIRCULARITY_THRESHOLD = parseFloat(this.value); document.getElementById('circVal').textContent = this.value;">
-                    </div>
-                    <div class="setting-item">
-                        <label class="setting-label">Esquinas: <span id="cornerVal">0.15</span></label>
-                        <input type="range" id="corners" min="0.05" max="0.3" value="0.15" step="0.05"
-                            oninput="DETECTION_CONFIG.CORNER_SENSITIVITY = parseFloat(this.value); document.getElementById('cornerVal').textContent = this.value;">
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- BASE DE DATOS -->
-        <div id="databaseTab" class="tab-content hidden">
-            <div class="database-section">
-                <h3 style="color: #60a5fa; margin-bottom: 15px;">Base de Datos Neon.tech</h3>
-                <div class="controls">
-                    <button class="btn btn-secondary" onclick="loadDetectionHistory()">🔄 Cargar Historial</button>
-                    <button class="btn btn-secondary" onclick="loadStats()">📈 Estadísticas</button>
-                    <button class="btn btn-danger" onclick="clearDatabase()">🗑 Limpiar BD</button>
-                </div>
-                <div id="statsSection" class="hidden" style="background: rgba(30, 41, 59, 0.6);
-                    padding: 15px; border-radius: 10px; margin: 15px 0;"></div>
-                <div id="historyList" class="history-list"></div>
-            </div>
-        </div>
-
-        <div id="status" class="status status-loading">
-            <span class="loading"></span> Cargando modelo de IA...
-        </div>
-
-        <div class="stats-grid">
-            <div class="stat-card">
-                <h3>Total de Objetos</h3>
-                <div class="number" id="totalObjects">0</div>
-            </div>
-            <div class="stat-card">
-                <h3>Tipos Únicos</h3>
-                <div class="number" id="uniqueObjects">0</div>
-            </div>
-            <div class="stat-card">
-                <h3>Confianza Promedio</h3>
-                <div class="number" id="avgConfidence">0%</div>
-            </div>
-        </div>
-
-        <div id="objectsContainer" class="objects-grid"></div>
+  <div class="container">
+    <div class="header">
+      <h1>🔍 Detector Inteligente de Objetos</h1>
+      <p style="color:#cbd5e1; margin-bottom:10px;">Cámara + Video + Imagen (con fallback de figuras)</p>
+      <p style="font-size:.9em;"><span class="api-status disconnected"></span><span id="apiStatusText">Verificando...</span></p>
     </div>
 
-    <script>
-        const DETECTION_CONFIG = {
-            COLOR_THRESHOLD: 15,
-            SHAPE_THRESHOLD: 128,
-            MIN_CONTOUR_SIZE: 20,
-            CORNER_SENSITIVITY: 0.15,
-            CIRCULARITY_THRESHOLD: 0.65
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('camera', this)">📹 Cámara</button>
+      <button class="tab" onclick="showTab('video', this)">🎬 Video</button>
+      <button class="tab" onclick="showTab('image', this)">📷 Imagen</button>
+      <button class="tab" onclick="showTab('database', this)">💾 Base de Datos</button>
+      <button class="tab" onclick="showTab('settings', this)">⚙️ Configuración</button>
+    </div>
+
+    <!-- CÁMARA -->
+    <div id="cameraTab" class="tab-content">
+      <div class="video-container">
+        <video id="cameraVideo" autoplay muted playsinline></video>
+        <canvas id="cameraCanvas"></canvas>
+      </div>
+      <div class="controls">
+        <button class="btn btn-primary" id="btnStartCam" onclick="startCamera()">📹 Iniciar Cámara</button>
+        <button class="btn btn-danger" id="btnStopCam" onclick="stopCamera()" disabled>⏹ Detener</button>
+        <button class="btn btn-secondary" onclick="saveCurrentDetection()">💾 Guardar Detección</button>
+      </div>
+    </div>
+
+    <!-- VIDEO -->
+    <div id="videoTab" class="tab-content hidden">
+      <div class="video-container">
+        <video id="fileVideo" controls playsinline></video>
+        <canvas id="fileCanvas"></canvas>
+      </div>
+      <div class="controls">
+        <input type="file" id="videoFile" accept="video/*" style="display:none"/>
+        <label for="videoFile" class="btn btn-secondary" style="cursor:pointer;">📁 Seleccionar Video</label>
+        <button class="btn btn-primary" id="btnAnalyzeVideo" onclick="analyzeVideo()">🔍 Analizar</button>
+        <button class="btn btn-danger" id="btnStopAnalyze" onclick="stopAnalyzeVideo()" disabled>⏹ Detener análisis</button>
+        <button class="btn btn-secondary" onclick="saveVideoDetection()">💾 Guardar Resultados</button>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="videoProgress"></div></div>
+    </div>
+
+    <!-- IMAGEN -->
+    <div id="imageTab" class="tab-content hidden">
+      <div class="image-stage" id="imageStage">
+        <img id="uploadedImg" class="img-el" alt="Imagen cargada" />
+        <canvas id="imageCanvas" class="img-canvas"></canvas>
+      </div>
+      <div class="controls">
+        <input type="file" id="imageFile" accept="image/*" style="display:none"/>
+        <label for="imageFile" class="btn btn-secondary" style="cursor:pointer;">📁 Seleccionar Imagen</label>
+        <button class="btn btn-primary" onclick="reAnalyzeImage()" id="btnReAnalyzeImg" disabled>🔁 Re-analizar</button>
+        <button class="btn btn-secondary" onclick="saveImageDetection()">💾 Guardar Resultados</button>
+      </div>
+    </div>
+
+    <!-- CONFIGURACIÓN -->
+    <div id="settingsTab" class="tab-content hidden">
+      <div class="settings-panel">
+        <h3 style="color:#60a5fa; margin-bottom:15px;">Ajustar Sensibilidad</h3>
+        <div class="setting-group">
+          <div class="setting-item">
+            <label class="setting-label">Color Threshold: <span id="colorVal">15</span></label>
+            <input type="range" id="colorThreshold" min="5" max="30" value="15" step="1"
+                   oninput="DETECTION_CONFIG.COLOR_THRESHOLD=parseInt(this.value); document.getElementById('colorVal').textContent=this.value;">
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Shape Threshold: <span id="shapeVal">128</span></label>
+            <input type="range" id="shapeThreshold" min="80" max="200" value="128" step="5"
+                   oninput="DETECTION_CONFIG.SHAPE_THRESHOLD=parseInt(this.value); document.getElementById('shapeVal').textContent=this.value;">
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Circularidad: <span id="circVal">0.65</span></label>
+            <input type="range" id="circularity" min="0.5" max="0.9" value="0.65" step="0.05"
+                   oninput="DETECTION_CONFIG.CIRCULARITY_THRESHOLD=parseFloat(this.value); document.getElementById('circVal').textContent=this.value;">
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Esquinas: <span id="cornerVal">0.15</span></label>
+            <input type="range" id="corners" min="0.05" max="0.3" value="0.15" step="0.05"
+                   oninput="DETECTION_CONFIG.CORNER_SENSITIVITY=parseFloat(this.value); document.getElementById('cornerVal').textContent=this.value;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BASE DE DATOS -->
+    <div id="databaseTab" class="tab-content hidden">
+      <div class="database-section">
+        <h3 style="color:#60a5fa; margin-bottom:15px;">Base de Datos Neon.tech</h3>
+        <div class="controls">
+          <button class="btn btn-secondary" onclick="loadDetectionHistory()">🔄 Cargar Historial</button>
+          <button class="btn btn-secondary" onclick="loadStats()">📈 Estadísticas</button>
+          <button class="btn btn-danger" onclick="clearDatabase()">🗑 Limpiar BD</button>
+        </div>
+        <div id="statsSection" class="hidden" style="background:rgba(30,41,59,.6); padding:15px; border-radius:10px; margin:15px 0;"></div>
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </div>
+
+    <div id="status" class="status status-loading">
+      <span class="loading"></span> Cargando modelo de IA...
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><h3>Total de Objetos</h3><div class="number" id="totalObjects">0</div></div>
+      <div class="stat-card"><h3>Tipos Únicos</h3><div class="number" id="uniqueObjects">0</div></div>
+      <div class="stat-card"><h3>Confianza Promedio</h3><div class="number" id="avgConfidence">0%</div></div>
+    </div>
+
+    <div id="objectsContainer" class="objects-grid"></div>
+  </div>
+
+  <script>
+    // ======= CONFIG =======
+    const DETECTION_CONFIG = {
+      COLOR_THRESHOLD: 15,
+      SHAPE_THRESHOLD: 128,
+      MIN_CONTOUR_SIZE: 20,
+      CORNER_SENSITIVITY: 0.15,
+      CIRCULARITY_THRESHOLD: 0.65
+    };
+
+    const API_URL = window.location.hostname === 'localhost'
+      ? 'http://localhost:3000/api'
+      : '/.netlify/functions/api';
+
+    let model = null;
+    let cameraStream = null;
+    let camLoopId = null;
+
+    let videoLoopId = null;
+    let isAnalyzingVideo = false;
+    let lastVideoDetectTs = 0;
+
+    let currentDetections = [];
+    let isApiConnected = false;
+    let usedFallback = false;
+
+    const analysisCanvas = document.createElement('canvas');
+    const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true });
+
+    const $ = (sel) => document.querySelector(sel);
+    const $id = (id) => document.getElementById(id);
+    const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+
+    // ======= COLOR & UTIL =======
+    function rgbToHsv(r,g,b){
+      r/=255; g/=255; b/=255;
+      const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min; let h=0;
+      if(d!==0){ switch(max){ case r:h=((g-b)/d)%6; break; case g:h=(b-r)/d+2; break; default:h=(r-g)/d+4; } h*=60; if(h<0)h+=360; }
+      return {h, s:max===0?0:d/max, v:max};
+    }
+    function colorNameFromHSV({h,s,v}){
+      if (v < 0.15) return 'Negro';
+      if (s < 0.15) return v > 0.85 ? 'Blanco' : 'Gris';
+      if (h < 15 || h >= 345) return 'Rojo';
+      if (h < 35) return 'Naranja';
+      if (h < 60) return 'Amarillo';
+      if (h < 90) return 'Lima';
+      if (h < 150) return 'Verde';
+      if (h < 200) return 'Cian';
+      if (h < 255) return 'Azul';
+      if (h < 290) return 'Índigo';
+      if (h < 330) return 'Púrpura';
+      return 'Magenta';
+    }
+    function dominantColorFromRegion(sourceEl, x,y,w,h, step=10){
+      try{
+        const sw = sourceEl.videoWidth || sourceEl.naturalWidth || sourceEl.width;
+        const sh = sourceEl.videoHeight || sourceEl.naturalHeight || sourceEl.height;
+        if(!sw || !sh) return {r:127,g:127,b:127};
+        analysisCanvas.width = sw; analysisCanvas.height = sh;
+        if (sourceEl instanceof HTMLVideoElement || sourceEl instanceof HTMLImageElement)
+          analysisCtx.drawImage(sourceEl,0,0,sw,sh);
+        else if (sourceEl instanceof HTMLCanvasElement){
+          const temp = sourceEl.getContext('2d').getImageData(0,0,sourceEl.width,sourceEl.height);
+          analysisCanvas.width = sourceEl.width; analysisCanvas.height = sourceEl.height; analysisCtx.putImageData(temp,0,0);
+        }
+        const cx=x+w*0.2, cy=y+h*0.2, cw=w*0.6, ch=h*0.6;
+        const rx=clamp(Math.floor(cx),0,sw-1), ry=clamp(Math.floor(cy),0,sh-1);
+        const rw=clamp(Math.floor(cw),1,sw-rx), rh=clamp(Math.floor(ch),1,sh-ry);
+        const img=analysisCtx.getImageData(rx,ry,rw,rh).data; let r=0,g=0,b=0,count=0;
+        for (let j=0;j<rh;j+=step) for (let i=0;i<rw;i+=step){ const idx=((j*rw)+i)*4; r+=img[idx]; g+=img[idx+1]; b+=img[idx+2]; count++; }
+        return count?{ r:Math.round(r/count), g:Math.round(g/count), b:Math.round(b/count) }:{r:127,g:127,b:127};
+      }catch{ return {r:127,g:127,b:127}; }
+    }
+    function basicShapeFromBBox(w,h){ const ratio=w/h; if(ratio>1.3) return 'Rectángulo H'; if(ratio<0.77) return 'Rectángulo V'; return 'Cuadrado'; }
+    function enrichDetectionsWithColorShape(preds, sourceEl){
+      return preds.map(p=>{
+        const [x,y,w,h]=p.bbox; const rgb=dominantColorFromRegion(sourceEl,x,y,w,h,12);
+        const hsv=rgbToHsv(rgb.r,rgb.g,rgb.b); return { ...p, _colorName: colorNameFromHSV(hsv), _shape: basicShapeFromBBox(w,h) };
+      });
+    }
+    function hueFromLabel(label){
+      let hash=0; for (let i=0;i<label.length;i++){ hash=(hash*31 + label.charCodeAt(i))>>>0; }
+      return hash % 360;
+    }
+
+    // ======= TABS =======
+    function showTab(name, btn){
+      document.querySelectorAll('.tab-content').forEach(t=>t.classList.add('hidden'));
+      $id(name+'Tab').classList.remove('hidden');
+      document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+    }
+
+    async function checkAPIConnection(){
+      try{
+        const res = await fetch(`${API_URL}/health`);
+        if(res.ok){ const r=await res.json(); if(r.status==='ok'){ isApiConnected=true; $id('apiStatusText').textContent='Conectado a Neon.tech'; document.querySelector('.api-status').className='api-status connected'; return true; } }
+      }catch{}
+      isApiConnected=false; $id('apiStatusText').textContent='Desconectado (modo local)'; document.querySelector('.api-status').className='api-status disconnected'; return false;
+    }
+
+    async function loadModel(){
+      try{
+        $id('status').innerHTML = '<span class="loading"></span> Cargando modelo...';
+        $id('status').className = 'status status-loading';
+        model = await cocoSsd.load();
+        $id('status').textContent = '✅ Modelo cargado - Listo';
+        $id('status').className = 'status status-success';
+      }catch(e){
+        $id('status').textContent = '❌ Error: '+e.message;
+        $id('status').className = 'status status-error';
+      }
+    }
+
+    // ======= FALLBACK DE FIGURAS =======
+    // Detecta componentes en una imagen y clasifica por ocupación del bounding box (triángulo ≈0.5, círculo ≈0.78, rectángulo ≈1)
+    function detectBasicShapesFromSource(sourceEl){
+      const sw = sourceEl.videoWidth || sourceEl.naturalWidth || sourceEl.width;
+      const sh = sourceEl.videoHeight || sourceEl.naturalHeight || sourceEl.height;
+      if(!sw || !sh) return [];
+
+      const maxW = 320;
+      const scale = sw > maxW ? maxW / sw : 1;
+      const W = Math.max(1, Math.round(sw * scale));
+      const H = Math.max(1, Math.round(sh * scale));
+
+      const off = document.createElement('canvas'); off.width=W; off.height=H;
+      const octx = off.getContext('2d', { willReadFrequently:true });
+      octx.drawImage(sourceEl, 0, 0, W, H);
+      const { data } = octx.getImageData(0, 0, W, H);
+
+      const mask = new Uint8Array(W*H);
+      for (let y=0; y<H; y++){
+        for (let x=0; x<W; x++){
+          const idx = (y*W + x)*4;
+          const r=data[idx], g=data[idx+1], b=data[idx+2];
+          const {s,v} = rgbToHsv(r,g,b);
+          // Umbral simple: descarta fondo oscuro o muy desaturado
+          mask[y*W+x] = (v>0.15 && (s>0.25 || v>0.35)) ? 1 : 0;
+        }
+      }
+
+      const visited = new Uint8Array(W*H);
+      const comps = [];
+      const qx = new Int32Array(W*H);
+      const qy = new Int32Array(W*H);
+
+      const minPixels = Math.max(50, Math.floor(W*H*0.005)); // ignora ruido
+
+      for (let y=0; y<H; y++){
+        for (let x=0; x<W; x++){
+          const i = y*W+x;
+          if (!mask[i] || visited[i]) continue;
+
+          // BFS
+          let head=0, tail=0;
+          qx[tail]=x; qy[tail]=y; tail++; visited[i]=1;
+
+          let minx=x, miny=y, maxx=x, maxy=y, count=0;
+
+          while(head<tail){
+            const cx=qx[head], cy=qy[head]; head++;
+            count++;
+            if (cx<minx) minx=cx; if (cy<miny) miny=cy;
+            if (cx>maxx) maxx=cx; if (cy>maxy) maxy=cy;
+
+            // 4-neigh
+            const neigh = [[1,0],[-1,0],[0,1],[0,-1]];
+            for (const [dx,dy] of neigh){
+              const nx=cx+dx, ny=cy+dy;
+              if (nx<0||ny<0||nx>=W||ny>=H) continue;
+              const ni = ny*W+nx;
+              if (mask[ni] && !visited[ni]){
+                visited[ni]=1; qx[tail]=nx; qy[tail]=ny; tail++;
+              }
+            }
+          }
+
+          const bw = (maxx-minx+1), bh=(maxy-miny+1);
+          if (count < minPixels || bw<5 || bh<5) continue;
+
+          const occupancy = count / (bw*bh); // ~0.5 triángulo, ~0.78 círculo, ~0.95 rectángulo lleno
+          let label='figura', conf=0.75;
+          if (occupancy < 0.62){ label='triángulo'; conf = 0.86 - Math.abs(0.50-occupancy); }
+          else if (occupancy > 0.86){ label='rectángulo'; conf = 0.88 - Math.abs(0.95-occupancy); }
+          else { label='círculo'; conf = 0.84 - Math.abs(0.785-occupancy); }
+
+          // mapea a coords originales
+          const inv = 1/scale;
+          const x0 = minx*inv, y0=miny*inv, ww=bw*inv, hh=bh*inv;
+
+          comps.push({
+            bbox: [x0, y0, ww, hh],
+            class: label,
+            score: clamp(conf, 0.5, 0.99)
+          });
+        }
+      }
+      return comps;
+    }
+
+    async function detectWithFallback(sourceEl){
+      if (!model) await loadModel();
+      usedFallback = false;
+      let preds = [];
+      try { preds = await model.detect(sourceEl); } catch { preds = []; }
+      if (preds.length === 0){
+        const shapes = detectBasicShapesFromSource(sourceEl);
+        if (shapes.length > 0){ usedFallback = true; return shapes; }
+      }
+      return preds;
+    }
+
+    // ======= CÁMARA =======
+    async function startCamera(){
+      try{
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video:{ width:960, height:540 } });
+        const v = $id('cameraVideo'); v.srcObject = cameraStream; await v.play();
+        const c = $id('cameraCanvas'); c.width = v.videoWidth; c.height = v.videoHeight;
+        $id('btnStartCam').disabled = true; $id('btnStopCam').disabled = false;
+        $id('status').textContent = '✅ Cámara activa'; $id('status').className = 'status status-success';
+        camLoop();
+      }catch(e){
+        $id('status').textContent = '❌ '+e.message; $id('status').className = 'status status-error';
+      }
+    }
+    function stopCamera(){
+      if (camLoopId) cancelAnimationFrame(camLoopId);
+      const v = $id('cameraVideo');
+      if (cameraStream){ cameraStream.getTracks().forEach(t=>t.stop()); cameraStream=null; }
+      v.srcObject = null;
+      $id('btnStartCam').disabled = false; $id('btnStopCam').disabled = true;
+      $id('status').textContent = '✅ Cámara detenida'; $id('status').className = 'status status-success';
+    }
+    async function camLoop(){
+      const v = $id('cameraVideo'); const c = $id('cameraCanvas');
+      async function step(){
+        if (!cameraStream) return;
+        const preds = await detectWithFallback(v);
+        const enriched = enrichDetectionsWithColorShape(preds, v);
+        currentDetections = enriched;
+        updateObjectsDisplay(enriched);
+        drawDetections(c, enriched);
+        camLoopId = requestAnimationFrame(step);
+      }
+      camLoopId = requestAnimationFrame(step);
+    }
+
+    // ======= VIDEO =======
+    $id('videoFile').addEventListener('change', (e)=>{
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const v = $id('fileVideo'); const c = $id('fileCanvas');
+      v.src = url;
+      v.onloadedmetadata = () => { c.width = v.videoWidth; c.height = v.videoHeight; };
+    });
+
+    async function analyzeVideo(){
+      const v = $id('fileVideo');
+      if (!v.src){ alert('Selecciona un video'); return; }
+      if (!model){ await loadModel(); }
+
+      isAnalyzingVideo = true; $id('btnAnalyzeVideo').disabled = true; $id('btnStopAnalyze').disabled = false;
+      $id('videoProgress').style.width = '0%';
+      $id('status').innerHTML = '<span class="loading"></span> Analizando video...'; $id('status').className = 'status status-loading';
+
+      try { await v.play(); } catch {}
+      const c = $id('fileCanvas');
+      const fpsTarget = 2; const minGap = 1000/fpsTarget; let last = performance.now();
+
+      const loop = async () => {
+        if (!isAnalyzingVideo) return;
+        const now = performance.now();
+        if (now - last >= minGap){
+          last = now;
+          const preds = await detectWithFallback(v);
+          const enriched = enrichDetectionsWithColorShape(preds, v);
+          currentDetections = enriched;
+          updateObjectsDisplay(enriched);
+          drawDetections(c, enriched);
+          const progress = v.duration ? (v.currentTime / v.duration) * 100 : 0;
+          $id('videoProgress').style.width = `${Math.min(100, progress)}%`;
+        }
+        if (v.ended){ stopAnalyzeVideo(); return; }
+        videoLoopId = requestAnimationFrame(loop);
+      };
+      videoLoopId = requestAnimationFrame(loop);
+    }
+    function stopAnalyzeVideo(){
+      isAnalyzingVideo = false;
+      if (videoLoopId) cancelAnimationFrame(videoLoopId);
+      $id('btnAnalyzeVideo').disabled = false; $id('btnStopAnalyze').disabled = true;
+      $id('status').textContent = '✅ Análisis de video detenido'; $id('status').className = 'status status-success';
+    }
+
+    // ======= IMAGEN =======
+    const uploadedImg = $id('uploadedImg');
+    const imageCanvas = $id('imageCanvas');
+    uploadedImg.style.display = 'none';
+
+    $id('imageFile').addEventListener('change', (e)=>{
+      const file = e.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (ev)=>{
+        uploadedImg.onload = async ()=>{
+          const stage = $id('imageStage');
+          imageCanvas.width = stage.clientWidth;
+          imageCanvas.height = Math.max(stage.clientHeight, 300);
+          uploadedImg.style.display = 'block';
+          await runImageDetection();
         };
+        uploadedImg.src = ev.target.result;
+        uploadedImg.alt = 'Imagen cargada';
+      };
+      reader.readAsDataURL(file);
+    });
 
-        const API_URL = window.location.hostname === 'localhost'
-            ? 'http://localhost:3000/api'
-            : '/.netlify/functions/api';
+    async function runImageDetection(){
+      if (!uploadedImg.src) return;
+      if (!model) await loadModel();
+      $id('btnReAnalyzeImg').disabled = true;
+      $id('status').innerHTML = '<span class="loading"></span> Analizando imagen...';
+      $id('status').className = 'status status-loading';
 
-        let model = null, cameraStream = null, detectionInterval = null;
-        let currentDetections = [], isApiConnected = false;
+      try{
+        const preds = await detectWithFallback(uploadedImg);
+        const enriched = enrichDetectionsWithColorShape(preds, uploadedImg);
+        currentDetections = enriched;
+        updateObjectsDisplay(enriched);
+        drawDetectionsOverFittedImage(uploadedImg, imageCanvas, enriched);
+        $id('status').textContent = usedFallback ? '✅ Imagen analizada (figuras)' : '✅ Imagen analizada';
+        $id('status').className = 'status status-success';
+      }catch(err){
+        $id('status').textContent = '❌ '+err.message; $id('status').className = 'status status-error';
+      }finally{
+        $id('btnReAnalyzeImg').disabled = false;
+      }
+    }
+    async function reAnalyzeImage(){ await runImageDetection(); }
 
-        const analysisCanvas = document.createElement('canvas');
-        const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true });
+    function drawDetectionsOverFittedImage(imgEl, canvas, predictions){
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,canvas.width,canvas.height);
 
-        function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+      const iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
+      const cw = canvas.width, ch = canvas.height;
+      const imgRatio = iw/ih, canvasRatio = cw/ch;
 
-        function rgbToHsv(r, g, b) {
-            r/=255; g/=255; b/=255;
-            const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max - min;
-            let h = 0;
-            if (d !== 0) {
-                switch (max) {
-                    case r: h = ((g - b) / d) % 6; break;
-                    case g: h = (b - r) / d + 2; break;
-                    case b: h = (r - g) / d + 4; break;
-                }
-                h *= 60; if (h < 0) h += 360;
-            }
-            return { h, s: max === 0 ? 0 : d / max, v: max };
-        }
+      let renderW, renderH, offsetX, offsetY;
+      if (imgRatio > canvasRatio){ renderW=cw; renderH=cw/imgRatio; offsetX=0; offsetY=(ch-renderH)/2; }
+      else { renderH=ch; renderW=ch*imgRatio; offsetY=0; offsetX=(cw-renderW)/2; }
 
-        function colorNameFromHSV({h, s, v}) {
-            if (v < 0.15) return 'Negro';
-            if (s < 0.15) return v > 0.85 ? 'Blanco' : 'Gris';
-            if (h < 15 || h >= 345) return 'Rojo';
-            if (h < 35) return 'Naranja';
-            if (h < 60) return 'Amarillo';
-            if (h < 90) return 'Lima';
-            if (h < 150) return 'Verde';
-            if (h < 200) return 'Cian';
-            if (h < 255) return 'Azul';
-            if (h < 290) return 'Índigo';
-            if (h < 330) return 'Púrpura';
-            return 'Magenta';
-        }
+      predictions.forEach(pred=>{
+        const [x,y,w,h]=pred.bbox;
+        const sx = x * (renderW/iw) + offsetX;
+        const sy = y * (renderH/ih) + offsetY;
+        const sw = w * (renderW/iw);
+        const sh = h * (renderH/ih);
 
-        function dominantColorFromRegion(sourceEl, x, y, w, h, step = 10) {
-            try {
-                const sw = sourceEl.videoWidth || sourceEl.width || sourceEl.naturalWidth;
-                const sh = sourceEl.videoHeight || sourceEl.height || sourceEl.naturalHeight;
-                if (!sw || !sh) return {r:127,g:127,b:127};
+        const confidence = Math.round((pred.score||0)*100);
+        const hue = hueFromLabel(pred.class);
+        const color = `hsl(${hue}, 70%, 50%)`;
 
-                analysisCanvas.width = sw; analysisCanvas.height = sh;
-                analysisCtx.drawImage(sourceEl, 0, 0, sw, sh);
+        ctx.strokeStyle=color; ctx.lineWidth=2; ctx.strokeRect(sx, sy, sw, sh);
+        ctx.font='14px Inter';
+        const text = `${pred.class} ${confidence}% | ${pred._colorName||''} • ${pred._shape||''}`;
+        const tw = ctx.measureText(text).width; const ty = (sy-20<0)? sy+sh+18 : sy-20;
+        ctx.fillStyle='rgba(0,0,0,.8)'; ctx.fillRect(sx, ty-16, tw+8, 20);
+        ctx.fillStyle='white'; ctx.fillText(text, sx+4, ty);
+      });
 
-                const cx = x + w*0.2, cy = y + h*0.2, cw = w*0.6, ch = h*0.6;
-                const rx = clamp(Math.floor(cx), 0, sw-1);
-                const ry = clamp(Math.floor(cy), 0, sh-1);
-                const rw = clamp(Math.floor(cw), 1, sw - rx);
-                const rh = clamp(Math.floor(ch), 1, sh - ry);
+      ctx.fillStyle='rgba(0,0,0,.85)'; ctx.fillRect(10,10,250,55);
+      ctx.fillStyle='white'; ctx.font='bold 16px Inter';
+      ctx.fillText(`Objetos: ${predictions.length}`, 18, 32);
+      ctx.font='13px Inter';
+      ctx.fillText(`Tipos: ${new Set(predictions.map(p=>p.class)).size}`, 18, 50);
+    }
 
-                const img = analysisCtx.getImageData(rx, ry, rw, rh).data;
-                let r=0,g=0,b=0,count=0;
-                for (let j=0; j<rh; j+=step) {
-                    for (let i=0; i<rw; i+=step) {
-                        const idx = ((j*rw)+i)*4;
-                        r += img[idx]; g += img[idx+1]; b += img[idx+2];
-                        count++;
-                    }
-                }
-                return count === 0 ? {r:127,g:127,b:127} : { r: Math.round(r/count), g: Math.round(g/count), b: Math.round(b/count) };
-            } catch {
-                return {r:127,g:127,b:127};
-            }
-        }
+    // ======= UI: Stats =======
+    function updateObjectsDisplay(predictions){
+      const objectCounts = {};
+      let totalConfidence = 0, totalObjects = 0;
+      predictions.forEach(pred=>{
+        const cls = pred.class; const conf = pred.score||0;
+        const color = pred._colorName || '—'; const shape = pred._shape || '—';
+        if (!objectCounts[cls]) objectCounts[cls] = { count:0, totalConfidence:0, colors:{}, shapes:{} };
+        objectCounts[cls].count++; objectCounts[cls].totalConfidence += conf;
+        objectCounts[cls].colors[color] = (objectCounts[cls].colors[color]||0)+1;
+        objectCounts[cls].shapes[shape] = (objectCounts[cls].shapes[shape]||0)+1;
+        totalConfidence += conf; totalObjects++;
+      });
 
-        function basicShapeFromBBox(w, h) {
-            const ratio = w / h;
-            if (ratio > 1.3) return 'Rectángulo H';
-            if (ratio < 0.77) return 'Rectángulo V';
-            return 'Cuadrado';
-        }
+      $id('totalObjects').textContent = totalObjects;
+      $id('uniqueObjects').textContent = Object.keys(objectCounts).length;
+      $id('avgConfidence').textContent = totalObjects>0 ? Math.round((totalConfidence/totalObjects)*100)+'%' : '0%';
 
-        function enrichDetectionsWithColorShape(predictions, sourceEl) {
-            return predictions.map(p => {
-                const [x,y,w,h] = p.bbox;
-                const rgb = dominantColorFromRegion(sourceEl, x,y,w,h, 12);
-                const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-                const colorName = colorNameFromHSV(hsv);
-                const shape = basicShapeFromBBox(w,h);
-                return { ...p, _colorName: colorName, _shape: shape };
-            });
-        }
+      const container = $id('objectsContainer'); container.innerHTML = '';
+      Object.entries(objectCounts).forEach(([cls, data])=>{
+        const avgConf = (data.totalConfidence / data.count) * 100;
+        const topColor = Object.entries(data.colors).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
+        const topShape = Object.entries(data.shapes).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
+        const card = document.createElement('div');
+        card.className = 'object-card';
+        card.innerHTML = `
+          <div class="object-name">${cls}</div>
+          <div class="object-count">${data.count}</div>
+          <div class="object-info">
+            <div>${Math.round(avgConf)}% confianza</div>
+            <div style="margin-top:8px; color:#60a5fa; font-size:.8em;">🎨 ${topColor} | ⬛ ${topShape}</div>
+          </div>`;
+        container.appendChild(card);
+      });
+    }
 
-        function showTab(name, btn) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-            document.getElementById(name + 'Tab').classList.remove('hidden');
-            document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-            if (btn) btn.classList.add('active');
-        }
+    function drawDetections(canvas, predictions){
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,canvas.width,canvas.height);
 
-        async function checkAPIConnection() {
-            try {
-                const response = await fetch(`${API_URL}/health`);
-                if (response.ok) {
-                    const result = await response.json();
-                    if (result.status === 'ok') {
-                        isApiConnected = true;
-                        document.getElementById('apiStatusText').textContent = 'Conectado a Neon.tech';
-                        document.querySelector('.api-status').className = 'api-status connected';
-                        return true;
-                    }
-                }
-            } catch {}
-            isApiConnected = false;
-            document.getElementById('apiStatusText').textContent = 'Desconectado (modo local)';
-            document.querySelector('.api-status').className = 'api-status disconnected';
-            return false;
-        }
+      predictions.forEach(pred=>{
+        const [x,y,w,h] = pred.bbox; const conf = Math.round((pred.score||0)*100);
+        const hue = hueFromLabel(pred.class); const color=`hsl(${hue},70%,50%)`;
+        ctx.strokeStyle=color; ctx.lineWidth=2; ctx.strokeRect(x,y,w,h);
+        ctx.font='14px Inter';
+        const text = `${pred.class} ${conf}% | ${pred._colorName||''} • ${pred._shape||''}`;
+        const tw = ctx.measureText(text).width; const ty = (y-20<0)? y+h+18 : y-20;
+        ctx.fillStyle='rgba(0,0,0,.8)'; ctx.fillRect(x, ty-16, tw+8, 20);
+        ctx.fillStyle='white'; ctx.fillText(text, x+4, ty);
+      });
 
-        async function loadModel() {
-            try {
-                document.getElementById('status').innerHTML = '<span class="loading"></span> Cargando modelo...';
-                document.getElementById('status').className = 'status status-loading';
-                model = await cocoSsd.load();
-                document.getElementById('status').textContent = '✅ Modelo cargado - Listo';
-                document.getElementById('status').className = 'status status-success';
-            } catch (error) {
-                document.getElementById('status').textContent = '❌ Error: ' + error.message;
-                document.getElementById('status').className = 'status status-error';
-            }
-        }
+      ctx.fillStyle='rgba(0,0,0,.85)'; ctx.fillRect(10,10,250,55);
+      ctx.fillStyle='white'; ctx.font='bold 16px Inter';
+      ctx.fillText(`Objetos: ${predictions.length}`, 18, 32);
+      ctx.font='13px Inter';
+      ctx.fillText(`Tipos: ${new Set(predictions.map(p=>p.class)).size}`, 18, 50);
+    }
 
-        async function startCamera() {
-            try {
-                cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: 800, height: 600 } });
-                document.getElementById('cameraVideo').srcObject = cameraStream;
-                document.getElementById('cameraVideo').onloadedmetadata = () => {
-                    document.getElementById('cameraCanvas').width = document.getElementById('cameraVideo').videoWidth;
-                    document.getElementById('cameraCanvas').height = document.getElementById('cameraVideo').videoHeight;
-                    startCameraDetection();
-                };
-                document.getElementById('btnStartCam').disabled = true;
-                document.getElementById('btnStopCam').disabled = false;
-                document.getElementById('status').textContent = '✅ Cámara activa';
-                document.getElementById('status').className = 'status status-success';
-            } catch (error) {
-                document.getElementById('status').textContent = '❌ ' + error.message;
-                document.getElementById('status').className = 'status status-error';
-            }
-        }
-
-        function stopCamera() {
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-            }
-            if (detectionInterval) clearInterval(detectionInterval);
-            document.getElementById('btnStartCam').disabled = false;
-            document.getElementById('btnStopCam').disabled = true;
-            document.getElementById('status').textContent = '✅ Cámara detenida';
-            document.getElementById('status').className = 'status status-success';
-        }
-
-        function startCameraDetection() {
-            detectionInterval = setInterval(async () => {
-                if (document.getElementById('cameraVideo').paused) return;
-                const predictions = await model.detect(document.getElementById('cameraVideo'));
-                const enriched = enrichDetectionsWithColorShape(predictions, document.getElementById('cameraVideo'));
-                currentDetections = enriched;
-                updateObjectsDisplay(enriched);
-                drawDetections(document.getElementById('cameraCanvas'), enriched);
-            }, 500);
-        }
-
-        document.getElementById('videoFile')?.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const url = URL.createObjectURL(file);
-                document.getElementById('fileVideo').src = url;
-                document.getElementById('fileVideo').onloadedmetadata = () => {
-                    document.getElementById('fileCanvas').width = document.getElementById('fileVideo').videoWidth;
-                    document.getElementById('fileCanvas').height = document.getElementById('fileVideo').videoHeight;
-                };
-            }
+    // ======= BD =======
+    async function saveToDatabase(detectionData){
+      if (!isApiConnected){ $id('status').textContent='⚠️ API desconectada'; $id('status').className='status status-error'; return; }
+      try{
+        $id('status').innerHTML='<span class="loading"></span> Guardando...'; $id('status').className='status status-loading';
+        const res = await fetch(`${API_URL}/detections`,{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ source: cameraStream ? 'camera' : (isAnalyzingVideo ? 'video' : 'archivo'), objects: detectionData })
         });
+        if (!res.ok) throw new Error('Error en servidor');
+        await res.json();
+        $id('status').textContent='✅ Guardado exitosamente'; $id('status').className='status status-success';
+      }catch(e){
+        $id('status').textContent='❌ '+e.message; $id('status').className='status status-error';
+      }
+    }
+    async function saveCurrentDetection(){ if (!currentDetections.length){ alert('No hay detecciones'); return; } await saveToDatabase(currentDetections); }
+    async function saveVideoDetection(){ if (!currentDetections.length){ alert('Analiza el video primero'); return; } await saveToDatabase(currentDetections); }
+    async function saveImageDetection(){ if (!currentDetections.length){ alert('No hay detecciones en la imagen'); return; } await saveToDatabase(currentDetections); }
 
-        document.getElementById('imageFile')?.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = async function(event) {
-                    const img = new Image();
-                    img.onload = async function() {
-                        const canvas = document.getElementById('imageCanvas');
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0);
-                        if (model) {
-                            const predictions = await model.detect(canvas);
-                            const enriched = enrichDetectionsWithColorShape(predictions, img);
-                            currentDetections = enriched;
-                            updateObjectsDisplay(enriched);
-                            drawDetections(canvas, enriched);
-                        }
-                    };
-                    img.src = event.target.result;
-                };
-                reader.readAsDataURL(file);
-            }
+    async function loadDetectionHistory(){
+      if (!isApiConnected){ $id('historyList').innerHTML='<div style="padding:20px; text-align:center; color:#fca5a5;">⚠️ API no disponible</div>'; return; }
+      try{
+        $id('status').innerHTML='<span class="loading"></span> Cargando...'; $id('status').className='status status-loading';
+        const res = await fetch(`${API_URL}/detections?limit=50`);
+        if (!res.ok) throw new Error('Error cargando');
+        const result = await res.json(); const history = result.data || [];
+        const list = $id('historyList'); list.innerHTML='';
+        if (history.length===0){
+          list.innerHTML='<div style="padding:20px; text-align:center; color:#94a3b8;">📭 Vacío</div>';
+          $id('status').textContent='✅ Base vacía'; $id('status').className='status status-success'; return;
+        }
+        history.forEach(record=>{
+          const date = new Date(record.timestamp);
+          const timeStr = date.toLocaleString('es-PE',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+          const item = document.createElement('div');
+          item.className='history-item';
+          item.innerHTML = `
+            <div style="width:100%;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <strong>${timeStr}</strong>
+                <span style="color:#10b981; font-weight:600;">${Math.round(record.avg_confidence)}%</span>
+              </div>
+              <div style="color:#94a3b8; font-size:.85em;">
+                ${record.total_objects} objetos | ${record.unique_objects} tipos | ${record.source}
+              </div>
+              <div style="color:#60a5fa; font-size:.8em; margin-top:6px;">
+                ${record.detected_objects || 'N/A'}
+              </div>
+            </div>`;
+          list.appendChild(item);
         });
+        $id('status').textContent=`✅ ${history.length} registros`; $id('status').className='status status-success';
+      }catch(e){
+        $id('status').textContent='❌ Error'; $id('status').className='status status-error';
+      }
+    }
+    async function loadStats(){
+      if (!isApiConnected){ alert('API desconectada'); return; }
+      try{
+        $id('status').innerHTML='<span class="loading"></span> Cargando stats...'; $id('status').className='status status-loading';
+        const res = await fetch(`${API_URL}/stats`);
+        if (!res.ok) throw new Error('Error');
+        const result = await res.json(); const stats = result.stats || {};
+        const box = $id('statsSection'); box.classList.remove('hidden');
+        box.innerHTML = `
+          <div style="display:grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap:12px;">
+            <div style="background:rgba(59,130,246,.1); padding:12px; border-radius:8px; border-left:3px solid #3b82f6;">
+              <div style="color:#94a3b8; font-size:.8em;">Total Detecciones</div>
+              <div style="font-size:1.8em; font-weight:700; color:#60a5fa;">${stats.total_detections||0}</div>
+            </div>
+            <div style="background:rgba(16,185,129,.1); padding:12px; border-radius:8px; border-left:3px solid #10b981;">
+              <div style="color:#94a3b8; font-size:.8em;">Total Objetos</div>
+              <div style="font-size:1.8em; font-weight:700; color:#6ee7b7;">${stats.total_objects_detected||0}</div>
+            </div>
+            <div style="background:rgba(217,119,6,.1); padding:12px; border-radius:8px; border-left:3px solid #d97706;">
+              <div style="color:#94a3b8; font-size:.8em;">Confianza Prom.</div>
+              <div style="font-size:1.8em; font-weight:700; color:#fbbf24;">${Math.round(stats.overall_avg_confidence||0)}%</div>
+            </div>
+            <div style="background:rgba(168,85,247,.1); padding:12px; border-radius:8px; border-left:3px solid #a855f7;">
+              <div style="color:#94a3b8; font-size:.8em;">Máximo Objetos</div>
+              <div style="font-size:1.8em; font-weight:700; color:#d8b4fe;">${stats.max_objects_in_detection||0}</div>
+            </div>
+          </div>`;
+        $id('status').textContent='✅ Estadísticas cargadas'; $id('status').className='status status-success';
+      }catch(e){
+        $id('status').textContent='❌ Error'; $id('status').className='status status-error';
+      }
+    }
+    async function clearDatabase(){
+      if (!isApiConnected){ alert('API desconectada'); return; }
+      if (!confirm('¿Eliminar TODOS los registros?')) return;
+      try{
+        $id('status').innerHTML='<span class="loading"></span> Limpiando...'; $id('status').className='status status-loading';
+        const res = await fetch(`${API_URL}/detections`, { method:'DELETE' });
+        if(!res.ok) throw new Error('Error');
+        $id('historyList').innerHTML = '<div style="padding:20px; text-align:center; color:#6ee7b7;">✅ Limpiado</div>';
+        $id('statsSection').classList.add('hidden');
+        $id('status').textContent='✅ BD limpiada'; $id('status').className='status status-success';
+      }catch(e){
+        $id('status').textContent='❌ Error'; $id('status').className='status status-error';
+      }
+    }
 
-        async function analyzeVideo() {
-            if (!document.getElementById('fileVideo').src) { alert('Selecciona un video'); return; }
-            document.getElementById('fileVideo').currentTime = 0;
-            await document.getElementById('fileVideo').play();
-            const duration = document.getElementById('fileVideo').duration || 0;
-            let analyzedFrames = 0;
-            const totalFrames = Math.max(1, Math.floor(duration * 2));
-            document.getElementById('fileVideo').ontimeupdate = async () => {
-                if (analyzedFrames >= totalFrames) {
-                    document.getElementById('fileVideo').pause();
-                    return;
-                }
-                if (document.getElementById('fileVideo').currentTime >= (analyzedFrames / 2)) {
-                    const predictions = await model.detect(document.getElementById('fileVideo'));
-                    const enriched = enrichDetectionsWithColorShape(predictions, document.getElementById('fileVideo'));
-                    currentDetections = enriched;
-                    updateObjectsDisplay(enriched);
-                    drawDetections(document.getElementById('fileCanvas'), enriched);
-                    analyzedFrames++;
-                    const progress = (analyzedFrames / totalFrames) * 100;
-                    document.getElementById('videoProgress').style.width = progress + '%';
-                }
-            };
-        }
-
-        function updateObjectsDisplay(predictions) {
-            const objectCounts = {};
-            let totalConfidence = 0, totalObjects = 0;
-
-            predictions.forEach(pred => {
-                const className = pred.class;
-                const confidence = pred.score;
-                const color = pred._colorName || '—';
-                const shape = pred._shape || '—';
-
-                if (!objectCounts[className]) {
-                    objectCounts[className] = { count: 0, totalConfidence: 0, colors: {}, shapes: {} };
-                }
-                objectCounts[className].count++;
-                objectCounts[className].totalConfidence += confidence;
-                objectCounts[className].colors[color] = (objectCounts[className].colors[color] || 0) + 1;
-                objectCounts[className].shapes[shape] = (objectCounts[className].shapes[shape] || 0) + 1;
-                totalConfidence += confidence;
-                totalObjects++;
-            });
-
-            document.getElementById('totalObjects').textContent = totalObjects;
-            document.getElementById('uniqueObjects').textContent = Object.keys(objectCounts).length;
-            document.getElementById('avgConfidence').textContent = totalObjects > 0 ? Math.round((totalConfidence / totalObjects) * 100) + '%' : '0%';
-
-            document.getElementById('objectsContainer').innerHTML = '';
-            Object.entries(objectCounts).forEach(([className, data]) => {
-                const avgConf = (data.totalConfidence / data.count) * 100;
-                const topColor = Object.entries(data.colors).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
-                const topShape = Object.entries(data.shapes).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
-
-                const card = document.createElement('div');
-                card.className = 'object-card';
-                card.innerHTML = `
-                    <div class="object-name">${className}</div>
-                    <div class="object-count">${data.count}</div>
-                    <div class="object-info">
-                        <div>${Math.round(avgConf)}% confianza</div>
-                        <div style="margin-top: 8px; color: #60a5fa; font-size: 0.8em;">
-                            🎨 ${topColor} | ⬛ ${topShape}
-                        </div>
-                    </div>
-                `;
-                document.getElementById('objectsContainer').appendChild(card);
-            });
-        }
-
-        function drawDetections(canvas, predictions) {
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const COCO_CLASSES = ['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat','traffic light','fire hydrant','stop sign','parking meter','bench','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie','suitcase','frisbee','skis','snowboard','sports ball','kite','baseball bat','baseball glove','skateboard','surfboard','tennis racket','bottle','wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake','chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven','toaster','sink','refrigerator','book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
-
-            predictions.forEach(pred => {
-                const [x, y, w, h] = pred.bbox;
-                const confidence = Math.round(pred.score * 100);
-                const hue = COCO_CLASSES.indexOf(pred.class) * 137.508 % 360;
-                const color = `hsl(${hue}, 70%, 50%)`;
-
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2;
-                ctx.strokeRect(x, y, w, h);
-
-                ctx.font = '14px Inter';
-                const text = `${pred.class} ${confidence}% | ${pred._colorName || ''} • ${pred._shape || ''}`;
-                const textWidth = ctx.measureText(text).width;
-                const textY = (y - 20 < 0) ? y + h + 18 : y - 20;
-
-                ctx.fillStyle = 'rgba(0,0,0,0.8)';
-                ctx.fillRect(x, textY - 16, textWidth + 8, 20);
-                ctx.fillStyle = 'white';
-                ctx.fillText(text, x + 4, textY);
-            });
-
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-            ctx.fillRect(10, 10, 250, 55);
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 16px Inter';
-            ctx.fillText(`Objetos: ${predictions.length}`, 18, 32);
-            ctx.font = '13px Inter';
-            ctx.fillText(`Tipos: ${new Set(predictions.map(p => p.class)).size}`, 18, 50);
-        }
-
-        async function saveToDatabase(detectionData) {
-            if (!isApiConnected) {
-                document.getElementById('status').textContent = '⚠️ API desconectada';
-                document.getElementById('status').className = 'status status-error';
-                return;
-            }
-            try {
-                document.getElementById('status').innerHTML = '<span class="loading"></span> Guardando...';
-                document.getElementById('status').className = 'status status-loading';
-
-                const response = await fetch(`${API_URL}/detections`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        source: cameraStream ? 'camera' : 'archivo',
-                        objects: detectionData
-                    })
-                });
-
-                if (!response.ok) throw new Error('Error en servidor');
-                await response.json();
-                document.getElementById('status').textContent = '✅ Guardado exitosamente';
-                document.getElementById('status').className = 'status status-success';
-            } catch (error) {
-                document.getElementById('status').textContent = '❌ ' + error.message;
-                document.getElementById('status').className = 'status status-error';
-            }
-        }
-
-        async function saveCurrentDetection() {
-            if (currentDetections.length === 0) { alert('No hay detecciones'); return; }
-            await saveToDatabase(currentDetections);
-        }
-
-        async function saveVideoDetection() {
-            if (currentDetections.length === 0) { alert('Analiza el video primero'); return; }
-            await saveToDatabase(currentDetections);
-        }
-
-        async function saveImageDetection() {
-            if (currentDetections.length === 0) { alert('No hay detecciones en la imagen'); return; }
-            await saveToDatabase(currentDetections);
-        }
-
-        async function loadDetectionHistory() {
-            if (!isApiConnected) {
-                document.getElementById('historyList').innerHTML = '<div style="padding: 20px; text-align: center; color: #fca5a5;">⚠️ API no disponible</div>';
-                return;
-            }
-            try {
-                document.getElementById('status').innerHTML = '<span class="loading"></span> Cargando...';
-                document.getElementById('status').className = 'status status-loading';
-
-                const response = await fetch(`${API_URL}/detections?limit=50`);
-                if (!response.ok) throw new Error('Error cargando');
-
-                const result = await response.json();
-                const history = result.data || [];
-                document.getElementById('historyList').innerHTML = '';
-
-                if (history.length === 0) {
-                    document.getElementById('historyList').innerHTML = '<div style="padding: 20px; text-align: center; color: #94a3b8;">📭 Vacío</div>';
-                    document.getElementById('status').textContent = '✅ Base vacía';
-                    document.getElementById('status').className = 'status status-success';
-                    return;
-                }
-
-                history.forEach(record => {
-                    const date = new Date(record.timestamp);
-                    const timeString = date.toLocaleString('es-PE', {
-                        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
-                    });
-
-                    const item = document.createElement('div');
-                    item.className = 'history-item';
-                    item.innerHTML = `
-                        <div style="width: 100%;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                                <strong>${timeString}</strong>
-                                <span style="color: #10b981; font-weight: 600;">${Math.round(record.avg_confidence)}%</span>
-                            </div>
-                            <div style="color: #94a3b8; font-size: 0.85em;">
-                                ${record.total_objects} objetos | ${record.unique_objects} tipos | ${record.source}
-                            </div>
-                            <div style="color: #60a5fa; font-size: 0.8em; margin-top: 6px;">
-                                ${record.detected_objects || 'N/A'}
-                            </div>
-                        </div>
-                    `;
-                    document.getElementById('historyList').appendChild(item);
-                });
-
-                document.getElementById('status').textContent = `✅ ${history.length} registros`;
-                document.getElementById('status').className = 'status status-success';
-            } catch (error) {
-                document.getElementById('status').textContent = '❌ Error';
-                document.getElementById('status').className = 'status status-error';
-            }
-        }
-
-        async function loadStats() {
-            if (!isApiConnected) { alert('API desconectada'); return; }
-            try {
-                document.getElementById('status').innerHTML = '<span class="loading"></span> Cargando stats...';
-                document.getElementById('status').className = 'status status-loading';
-
-                const response = await fetch(`${API_URL}/stats`);
-                if (!response.ok) throw new Error('Error');
-
-                const result = await response.json();
-                const stats = result.stats || {};
-
-                document.getElementById('statsSection').classList.remove('hidden');
-                document.getElementById('statsSection').innerHTML = `
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
-                        <div style="background: rgba(59, 130, 246, 0.1); padding: 12px; border-radius: 8px; border-left: 3px solid #3b82f6;">
-                            <div style="color: #94a3b8; font-size: 0.8em;">Total Detecciones</div>
-                            <div style="font-size: 1.8em; font-weight: 700; color: #60a5fa;">${stats.total_detections || 0}</div>
-                        </div>
-                        <div style="background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 8px; border-left: 3px solid #10b981;">
-                            <div style="color: #94a3b8; font-size: 0.8em;">Total Objetos</div>
-                            <div style="font-size: 1.8em; font-weight: 700; color: #6ee7b7;">${stats.total_objects_detected || 0}</div>
-                        </div>
-                        <div style="background: rgba(217, 119, 6, 0.1); padding: 12px; border-radius: 8px; border-left: 3px solid #d97706;">
-                            <div style="color: #94a3b8; font-size: 0.8em;">Confianza Prom.</div>
-                            <div style="font-size: 1.8em; font-weight: 700; color: #fbbf24;">${Math.round(stats.overall_avg_confidence || 0)}%</div>
-                        </div>
-                        <div style="background: rgba(168, 85, 247, 0.1); padding: 12px; border-radius: 8px; border-left: 3px solid #a855f7;">
-                            <div style="color: #94a3b8; font-size: 0.8em;">Máximo Objetos</div>
-                            <div style="font-size: 1.8em; font-weight: 700; color: #d8b4fe;">${stats.max_objects_in_detection || 0}</div>
-                        </div>
-                    </div>
-                `;
-
-                document.getElementById('status').textContent = '✅ Estadísticas cargadas';
-                document.getElementById('status').className = 'status status-success';
-            } catch (error) {
-                document.getElementById('status').textContent = '❌ Error';
-                document.getElementById('status').className = 'status status-error';
-            }
-        }
-
-        async function clearDatabase() {
-            if (!isApiConnected) { alert('API desconectada'); return; }
-            if (!confirm('¿Eliminar TODOS los registros?')) return;
-
-            try {
-                document.getElementById('status').innerHTML = '<span class="loading"></span> Limpiando...';
-                document.getElementById('status').className = 'status status-loading';
-
-                const response = await fetch(`${API_URL}/detections`, { method: 'DELETE' });
-                if (!response.ok) throw new Error('Error');
-
-                document.getElementById('historyList').innerHTML = '<div style="padding: 20px; text-align: center; color: #6ee7b7;">✅ Limpiado</div>';
-                document.getElementById('statsSection').classList.add('hidden');
-                document.getElementById('status').textContent = '✅ BD limpiada';
-                document.getElementById('status').className = 'status status-success';
-            } catch (error) {
-                document.getElementById('status').textContent = '❌ Error';
-                document.getElementById('status').className = 'status status-error';
-            }
-        }
-
-        window.addEventListener('load', async () => {
-            await loadModel();
-            await checkAPIConnection();
-            if (isApiConnected) {
-                loadDetectionHistory();
-            }
-        });
-
-        setInterval(async () => {
-            if (!isApiConnected) await checkAPIConnection();
-        }, 30000);
-    </script>
+    // ======= INIT =======
+    window.addEventListener('load', async ()=>{
+      await loadModel();
+      await checkAPIConnection();
+      if (isApiConnected){ loadDetectionHistory(); }
+    });
+    setInterval(async ()=>{ if(!isApiConnected) await checkAPIConnection(); }, 30000);
+  </script>
 </body>
 </html>
