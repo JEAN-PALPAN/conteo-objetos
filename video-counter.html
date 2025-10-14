@@ -43,7 +43,8 @@
             font-size: 2.5em;
             margin-bottom: 10px;
             background: linear-gradient(135deg, #2c3e50, #3498db);
-            /* -webkit-background-clip: text; */
+            -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
         }
@@ -124,6 +125,25 @@
         .file-label:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(52, 152, 219, 0.4);
+        }
+
+        .settings {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            color: #333;
+        }
+
+        .setting-item {
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .setting-item input[type="range"] {
+            width: 200px;
         }
 
         .video-container {
@@ -335,7 +355,7 @@
     <div class="container">
         <div class="header">
             <h1>🎬 Analizador de Videos</h1>
-            <p>Sube un video y cuenta personas automáticamente</p>
+            <p>Sube un video y cuenta personas automáticamente con alta precisión</p>
         </div>
 
         <div class="navigation">
@@ -350,6 +370,23 @@
             <input type="file" id="videoFile" class="file-input" accept="video/*">
             <label for="videoFile" class="file-label">📹 Seleccionar Video</label>
             <p style="color: #666; margin-top: 15px;">o arrastra y suelta el archivo aquí</p>
+        </div>
+
+        <div class="settings">
+            <h3>⚙️ Configuración Avanzada</h3>
+            <div class="setting-item">
+                <label>Umbral de Confianza: <span id="confidenceValue">20%</span></label>
+                <input type="range" id="confidenceThreshold" min="10" max="70" value="20" oninput="updateConfidence(this.value)">
+            </div>
+            <div class="setting-item">
+                <label>Intervalo de Análisis: <span id="intervalValue">50ms (Ultra rápido)</span></label>
+                <input type="range" id="analysisInterval" min="1" max="4" value="1" oninput="updateInterval(this.value)">
+            </div>
+            <div class="setting-item">
+                <label>
+                    <input type="checkbox" id="enableNMS" checked> Eliminar duplicados (NMS)
+                </label>
+            </div>
         </div>
 
         <div id="status" class="status status-loading">
@@ -384,6 +421,10 @@
                     <h3>Promedio</h3>
                     <div class="number" id="averageCount">0</div>
                 </div>
+                <div class="stat-card">
+                    <h3>Frames Analizados</h3>
+                    <div class="number" id="framesCount">0</div>
+                </div>
             </div>
 
             <div class="controls">
@@ -411,7 +452,6 @@
     </div>
 
     <script>
-        // Elementos DOM
         const videoFile = document.getElementById('videoFile');
         const videoPlayer = document.getElementById('videoPlayer');
         const canvas = document.getElementById('canvas');
@@ -423,22 +463,22 @@
         const currentCountEl = document.getElementById('currentCount');
         const maxCountEl = document.getElementById('maxCount');
         const averageCountEl = document.getElementById('averageCount');
+        const framesCountEl = document.getElementById('framesCount');
         const progressBar = document.getElementById('progressBar');
         const videoName = document.getElementById('videoName');
         const videoDuration = document.getElementById('videoDuration');
         const finalStats = document.getElementById('finalStats');
         const btnAnalyze = document.getElementById('btnAnalyze');
         const btnPause = document.getElementById('btnPause');
-        const btnExport = document.getElementById('btnExport');
 
-        // Variables de estado
         let model = null;
         let isModelLoaded = false;
         let isAnalyzing = false;
-        let analysisInterval = null;
         let currentVideoFile = null;
+        let confidenceThreshold = 0.20;
+        let analysisIntervalMs = 50;
+        let enableNMS = true;
         
-        // Estadísticas del video
         let videoStats = {
             currentCount: 0,
             maxCount: 0,
@@ -449,13 +489,12 @@
             endTime: null
         };
 
-        // Cargar el modelo COCO-SSD
         async function loadModel() {
             try {
-                statusDiv.textContent = '🔄 Cargando modelo de detección...';
+                statusDiv.innerHTML = '<span class="loading"></span> Cargando modelo de detección...';
                 statusDiv.className = 'status status-loading';
                 
-                model = await cocoSsd.load();
+                model = await cocoSsd.load({base: 'lite_mobilenet_v2'});
                 isModelLoaded = true;
                 
                 statusDiv.textContent = '✅ Modelo cargado - Listo para analizar videos';
@@ -468,15 +507,27 @@
             }
         }
 
-        // Manejar selección de archivo
-        videoFile.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                loadVideoFile(file);
-            }
+        function updateConfidence(value) {
+            confidenceThreshold = value / 100;
+            document.getElementById('confidenceValue').textContent = value + '%';
+        }
+
+        function updateInterval(value) {
+            const intervals = [50, 100, 150, 200];
+            const labels = ['50ms (Ultra rápido)', '100ms (Rápido)', '150ms (Normal)', '200ms (Lento)'];
+            analysisIntervalMs = intervals[value - 1];
+            document.getElementById('intervalValue').textContent = labels[value - 1];
+        }
+
+        document.getElementById('enableNMS').addEventListener('change', function(e) {
+            enableNMS = e.target.checked;
         });
 
-        // Drag and drop
+        videoFile.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) loadVideoFile(file);
+        });
+
         uploadSection.addEventListener('dragover', function(e) {
             e.preventDefault();
             uploadSection.classList.add('dragover');
@@ -497,7 +548,6 @@
             }
         });
 
-        // Cargar archivo de video
         function loadVideoFile(file) {
             currentVideoFile = file;
             const url = URL.createObjectURL(file);
@@ -511,16 +561,13 @@
                 const seconds = Math.floor(duration % 60);
                 videoDuration.textContent = `Duración: ${minutes}:${seconds.toString().padStart(2, '0')}`;
                 
-                // Configurar canvas
                 canvas.width = videoPlayer.videoWidth;
                 canvas.height = videoPlayer.videoHeight;
                 
-                // Mostrar sección de video
                 uploadSection.classList.add('hidden');
                 videoSection.classList.remove('hidden');
                 resultsSection.classList.add('hidden');
                 
-                // Reiniciar estadísticas
                 resetStats();
             };
             
@@ -529,7 +576,6 @@
             };
         }
 
-        // Reiniciar estadísticas
         function resetStats() {
             videoStats = {
                 currentCount: 0,
@@ -544,12 +590,12 @@
             currentCountEl.textContent = '0';
             maxCountEl.textContent = '0';
             averageCountEl.textContent = '0';
+            framesCountEl.textContent = '0';
             progressBar.style.width = '0%';
             progressBar.textContent = '0%';
         }
 
-        // Iniciar análisis
-        function startAnalysis() {
+        async function startAnalysis() {
             if (!currentVideoFile || !isModelLoaded) {
                 alert('Por favor carga un video y espera a que el modelo se cargue.');
                 return;
@@ -559,115 +605,180 @@
             videoStats.startTime = Date.now();
             btnAnalyze.disabled = true;
             
-            statusDiv.textContent = '🔍 Analizando video...';
+            statusDiv.innerHTML = '<span class="loading"></span> Analizando video...';
             statusDiv.className = 'status status-loading';
             
-            // Reproducir video desde el inicio
             videoPlayer.currentTime = 0;
             videoPlayer.play();
             
-            // Iniciar análisis de frames
             analyzeVideoFrames();
         }
 
-        // Analizar frames del video
-        function analyzeVideoFrames() {
-            analysisInterval = setInterval(async () => {
-                if (!isAnalyzing || videoPlayer.paused || videoPlayer.ended) {
-                    if (videoPlayer.ended) {
-                        finishAnalysis();
-                    }
-                    return;
+        async function analyzeVideoFrames() {
+            if (!isAnalyzing || videoPlayer.paused || videoPlayer.ended) {
+                if (videoPlayer.ended) {
+                    finishAnalysis();
                 }
+                return;
+            }
 
-                try {
-                    // Realizar detección en el frame actual
-                    const predictions = await model.detect(videoPlayer);
-                    
-                    // Filtrar solo personas
-                    const people = predictions.filter(pred => pred.class === 'person');
-                    const count = people.length;
-                    
-                    // Actualizar estadísticas
-                    videoStats.currentCount = count;
-                    videoStats.peopleCounts.push(count);
-                    
-                    if (count > videoStats.maxCount) {
-                        videoStats.maxCount = count;
-                    }
-                    
-                    videoStats.processedFrames++;
-                    
-                    // Actualizar UI
-                    updateVideoStats();
-                    
-                    // Dibujar detecciones
-                    drawDetections(people);
-                    
-                } catch (error) {
-                    console.error('Error durante el análisis:', error);
+            try {
+                const predictions = await model.detect(videoPlayer);
+                let people = predictions.filter(pred => pred.class === 'person');
+                
+                people = filterDetections(people);
+                
+                if (enableNMS) {
+                    people = removeOverlappingDetections(people);
                 }
-            }, 200); // Analizar cada 200ms para balance entre rendimiento y precisión
+                
+                const count = people.length;
+                
+                videoStats.currentCount = count;
+                videoStats.peopleCounts.push(count);
+                videoStats.processedFrames++;
+                
+                if (count > videoStats.maxCount) {
+                    videoStats.maxCount = count;
+                }
+                
+                updateVideoStats();
+                drawDetections(people);
+                
+            } catch (error) {
+                console.error('Error durante el análisis:', error);
+            }
+
+            setTimeout(() => {
+                if (isAnalyzing) {
+                    requestAnimationFrame(analyzeVideoFrames);
+                }
+            }, analysisIntervalMs);
         }
 
-        // Actualizar estadísticas del video
+        function filterDetections(detections) {
+            return detections.filter(detection => {
+                const [x, y, width, height] = detection.bbox;
+                
+                if (detection.score < confidenceThreshold) return false;
+                
+                const minArea = (canvas.width * canvas.height) * 0.0003;
+                const maxArea = (canvas.width * canvas.height) * 0.85;
+                const area = width * height;
+                
+                if (area < minArea || area > maxArea) return false;
+                
+                const aspectRatio = height / width;
+                if (aspectRatio < 0.7 || aspectRatio > 5) return false;
+                
+                return true;
+            });
+        }
+
+        function removeOverlappingDetections(detections) {
+            if (detections.length === 0) return detections;
+            
+            const filtered = [];
+            const sorted = detections.sort((a, b) => b.score - a.score);
+            
+            for (let i = 0; i < sorted.length; i++) {
+                let isOverlapping = false;
+                
+                for (let j = 0; j < filtered.length; j++) {
+                    if (calculateIOU(sorted[i].bbox, filtered[j].bbox) > 0.3) {
+                        isOverlapping = true;
+                        break;
+                    }
+                }
+                
+                if (!isOverlapping) {
+                    filtered.push(sorted[i]);
+                }
+            }
+            
+            return filtered;
+        }
+
+        function calculateIOU(boxA, boxB) {
+            const [x1A, y1A, wA, hA] = boxA;
+            const [x1B, y1B, wB, hB] = boxB;
+            
+            const x2A = x1A + wA;
+            const y2A = y1A + hA;
+            const x2B = x1B + wB;
+            const y2B = y1B + hB;
+            
+            const xA = Math.max(x1A, x1B);
+            const yA = Math.max(y1A, y1B);
+            const xB = Math.min(x2A, x2B);
+            const yB = Math.min(y2A, y2B);
+            
+            const interArea = Math.max(0, xB - xA) * Math.max(0, yB - yA);
+            const boxAArea = wA * hA;
+            const boxBArea = wB * hB;
+            
+            const iou = interArea / (boxAArea + boxBArea - interArea);
+            return iou;
+        }
+
         function updateVideoStats() {
             currentCountEl.textContent = videoStats.currentCount;
             maxCountEl.textContent = videoStats.maxCount;
+            framesCountEl.textContent = videoStats.processedFrames;
             
-            // Calcular promedio
             if (videoStats.peopleCounts.length > 0) {
                 const average = videoStats.peopleCounts.reduce((a, b) => a + b, 0) / videoStats.peopleCounts.length;
                 averageCountEl.textContent = average.toFixed(1);
             }
             
-            // Actualizar progreso
             const progress = (videoPlayer.currentTime / videoPlayer.duration) * 100;
             progressBar.style.width = progress + '%';
             progressBar.textContent = Math.round(progress) + '%';
         }
 
-        // Dibujar detecciones en el canvas
         function drawDetections(people) {
-            // Limpiar canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            people.forEach(person => {
+            people.forEach((person, index) => {
                 const [x, y, width, height] = person.bbox;
                 const confidence = Math.round(person.score * 100);
                 
-                // Dibujar rectángulo
-                ctx.strokeStyle = confidence > 70 ? '#27ae60' : confidence > 50 ? '#f39c12' : '#e74c3c';
+                let color;
+                if (confidence >= 70) color = '#27ae60';
+                else if (confidence >= 50) color = '#f39c12';
+                else color = '#e74c3c';
+                
+                ctx.strokeStyle = color;
                 ctx.lineWidth = 3;
                 ctx.strokeRect(x, y, width, height);
                 
-                // Dibujar fondo para texto
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                 ctx.fillRect(x, y - 25, 120, 25);
                 
-                // Dibujar texto
                 ctx.fillStyle = 'white';
-                ctx.font = '16px Arial';
-                ctx.fillText(`Persona: ${confidence}%`, x + 5, y - 8);
+                ctx.font = '14px Arial';
+                ctx.fillText(`Persona ${index + 1}: ${confidence}%`, x + 5, y - 8);
             });
 
-            // Dibujar contador en pantalla
             ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-            ctx.fillRect(10, 10, 250, 80);
+            ctx.fillRect(10, 10, 250, 100);
             ctx.fillStyle = 'white';
             ctx.font = 'bold 20px Arial';
             ctx.fillText(`Personas: ${videoStats.currentCount}`, 20, 35);
             ctx.font = '16px Arial';
-            ctx.fillText(`Máximo: ${videoStats.maxCount}`, 20, 60);
-            ctx.fillText(`Progreso: ${Math.round((videoPlayer.currentTime / videoPlayer.duration) * 100)}%`, 20, 85);
+            ctx.fillText(`Máximo: ${videoStats.maxCount}`, 20, 58);
+            ctx.fillText(`Frames: ${videoStats.processedFrames}`, 20, 78);
+            ctx.fillText(`Progreso: ${Math.round((videoPlayer.currentTime / videoPlayer.duration) * 100)}%`, 20, 98);
         }
 
-        // Pausar/reanudar análisis
         function togglePause() {
             if (videoPlayer.paused) {
                 videoPlayer.play();
                 btnPause.textContent = '⏸️ Pausar';
-                isAnalyzing = true;
+                if (!isAnalyzing) {
+                    isAnalyzing = true;
+                    analyzeVideoFrames();
+                }
             } else {
                 videoPlayer.pause();
                 btnPause.textContent = '▶️ Reanudar';
@@ -675,9 +786,7 @@
             }
         }
 
-        // Finalizar análisis
         function finishAnalysis() {
-            clearInterval(analysisInterval);
             isAnalyzing = false;
             videoStats.endTime = Date.now();
             
@@ -685,21 +794,19 @@
             const totalPeople = videoStats.peopleCounts.reduce((a, b) => a + b, 0);
             const averagePeople = totalPeople / videoStats.peopleCounts.length;
             
-            // Mostrar resultados finales
             finalStats.textContent = 
                 `Análisis completado en ${analysisTime.toFixed(1)} segundos. ` +
-                `Máximo de personas: ${videoStats.maxCount}, Promedio: ${averagePeople.toFixed(1)}`;
+                `Máximo de personas: ${videoStats.maxCount}, Promedio: ${averagePeople.toFixed(1)}, ` +
+                `Frames analizados: ${videoStats.processedFrames}`;
             
             resultsSection.classList.remove('hidden');
             btnAnalyze.disabled = false;
             
-            statusDiv.textContent = '✅ Análisis completado';
+            statusDiv.textContent = '✅ Análisis completado - Máximo: ' + videoStats.maxCount + ' personas';
             statusDiv.className = 'status status-success';
         }
 
-        // Reiniciar análisis
         function resetAnalysis() {
-            clearInterval(analysisInterval);
             isAnalyzing = false;
             videoPlayer.pause();
             videoPlayer.currentTime = 0;
@@ -714,7 +821,6 @@
             statusDiv.className = 'status status-success';
         }
 
-        // Exportar resultados
         function exportResults() {
             if (videoStats.peopleCounts.length === 0) {
                 alert('No hay datos para exportar. Ejecuta el análisis primero.');
@@ -727,7 +833,13 @@
                 analysisTime: videoStats.endTime ? (videoStats.endTime - videoStats.startTime) / 1000 : 0,
                 maxPeople: videoStats.maxCount,
                 averagePeople: videoStats.peopleCounts.reduce((a, b) => a + b, 0) / videoStats.peopleCounts.length,
+                framesAnalyzed: videoStats.processedFrames,
                 peopleCounts: videoStats.peopleCounts,
+                settings: {
+                    confidenceThreshold: confidenceThreshold,
+                    analysisInterval: analysisIntervalMs,
+                    nmsEnabled: enableNMS
+                },
                 timestamp: new Date().toISOString()
             };
 
@@ -735,17 +847,16 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `conteo-personas-${currentVideoFile.name}-${new Date().toISOString().slice(0,19)}.json`;
+            a.download = `analisis-personas-${Date.now()}.json`;
             a.click();
             URL.revokeObjectURL(url);
             
-            statusDiv.textContent = '📊 Resultados exportados';
+            statusDiv.textContent = '📊 Resultados exportados exitosamente';
             setTimeout(() => {
                 statusDiv.textContent = '✅ Análisis completado';
             }, 2000);
         }
 
-        // Inicializar la aplicación
         window.addEventListener('load', () => {
             loadModel();
         });
