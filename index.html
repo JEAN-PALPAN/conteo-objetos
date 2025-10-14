@@ -443,8 +443,10 @@
     <script>
         // ========== CONFIGURACIÓN API ==========
         // CAMBIA ESTA URL cuando despliegues tu backend
-        const API_URL = 'http://localhost:3000/api';
-
+        // const API_URL = 'http://localhost:3000/api';
+const API_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:3000/api'
+  : '/.netlify/functions/api';
         // Elementos DOM
         const cameraVideo = document.getElementById('cameraVideo');
         const cameraCanvas = document.getElementById('cameraCanvas');
